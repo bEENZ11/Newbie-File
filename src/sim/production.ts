@@ -1,15 +1,15 @@
 // Base building: the sidebar production slot, power, placement and selling.
 
-import { addBuilding, removeBuilding } from './world';
+import { addBuilding, removeBuilding, spawnUnit } from './world';
 import {
   BUILDING_DEFS,
   BUILD_RANGE,
   MIN_POWER_RATE,
   SELL_REFUND_PERCENT,
   cellIndex,
+  dockCell,
   inBounds,
   isActive,
-  toCell,
   type Building,
   type BuildingType,
   type SimEvent,
@@ -136,11 +136,12 @@ export function checkPlacement(
 ): PlacementCheck {
   const def = BUILDING_DEFS[type];
 
-  // Cells a unit is standing on, or is in the middle of stepping into.
-  const occupied = new Set<number>();
-  for (const u of world.units) {
-    occupied.add(cellIndex(toCell(u.x), toCell(u.y)));
-    if (u.path.length > 0) occupied.add(u.path[0]);
+  // Refinery docks must stay open, so nothing may be built on one.
+  const docks = new Set<number>();
+  for (const b of world.buildings) {
+    if (b.type !== 'refinery') continue;
+    const d = dockCell(b);
+    if (inBounds(d.x, d.y)) docks.add(cellIndex(d.x, d.y));
   }
 
   const cells: PlacementCheck['cells'] = [];
@@ -148,10 +149,23 @@ export function checkPlacement(
   for (let y = cy; y < cy + def.h; y++) {
     for (let x = cx; x < cx + def.w; x++) {
       const i = cellIndex(x, y);
-      const ok = inBounds(x, y) && !world.blocked[i] && world.ore[i] === 0 && !occupied.has(i);
+      const ok =
+        inBounds(x, y) &&
+        !world.blocked[i] &&
+        world.ore[i] === 0 &&
+        world.occupied[i] === 0 &&
+        !docks.has(i);
       if (!ok) clear = false;
       cells.push({ x, y, ok });
     }
+  }
+
+  // A refinery also needs its own dock cell to be on the map and unobstructed.
+  if (type === 'refinery') {
+    const d = dockCell({ cx, cy, w: def.w, h: def.h } as Building);
+    const ok = inBounds(d.x, d.y) && !world.blocked[cellIndex(d.x, d.y)];
+    if (!ok) clear = false;
+    cells.push({ x: d.x, y: d.y, ok });
   }
 
   // Must be near an existing building of the player's, leaving at most a
@@ -201,7 +215,11 @@ export function sellBuilding(world: World, player: number, buildingId: number): 
 export function tickBuildings(world: World, events: SimEvent[]): void {
   for (const b of world.buildings.slice()) {
     if (!b.selling) {
-      if (b.progress < b.total) b.progress++;
+      if (b.progress < b.total && ++b.progress === b.total && b.type === 'refinery') {
+        // Every refinery comes with a harvester, which sets off on its own.
+        const dock = dockCell(b);
+        spawnUnit(world, 'harvester', b.owner, dock.x, dock.y);
+      }
       continue;
     }
     b.progress -= 2;

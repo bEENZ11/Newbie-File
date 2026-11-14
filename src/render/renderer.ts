@@ -3,6 +3,7 @@ import { checkPlacement } from '../sim/production';
 import { canDeploy, deployFootprint } from '../sim/step';
 import {
   BUILDING_DEFS,
+  HARVEST_CAPACITY,
   MAP_H,
   MAP_W,
   SUB,
@@ -11,7 +12,7 @@ import {
   type World,
 } from '../sim/types';
 import { LOCAL_PLAYER, placementOrigin, type UiState } from '../ui';
-import { frameGeometry, makeBuilding, makeGhost, makePioneer } from './models';
+import { frameGeometry, makeBuilding, makeGhost, makeUnit } from './models';
 
 // The view is 3D with a fixed camera: looking north, tilted down at the ground.
 // One cell is one world unit, x runs east and z runs south.
@@ -32,10 +33,17 @@ function noise(x: number, y: number, salt: number): number {
   return ((h ^ (h >>> 13)) >>> 0) / 4294967296;
 }
 
+/** How many nuggets to draw on a cell, so a field visibly thins as it is mined. */
+function oreNuggets(amount: number): number {
+  return amount <= 0 ? 0 : 1 + Math.min(5, Math.floor(amount / 170));
+}
+
 interface UnitView {
   obj: THREE.Group;
   ring: THREE.Mesh;
   angle: number;
+  cargo: THREE.Object3D | null;
+  drum: THREE.Object3D | null;
 }
 
 interface BuildingView {
@@ -109,7 +117,7 @@ export class Renderer {
     this.scene.add(this.preview, this.previewFrame);
 
     const tile = new THREE.PlaneGeometry(0.92, 0.92).rotateX(-Math.PI / 2);
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 10; i++) {
       const cell = new THREE.Mesh(
         tile,
         new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.45, depthWrite: false }),
@@ -247,10 +255,10 @@ export class Renderer {
   private syncOre(world: World): void {
     let changed = !this.oreDrawn;
     for (let i = 0; i < world.ore.length && !changed; i++) {
-      if (world.ore[i] !== this.oreSeen[i]) changed = true;
+      if (oreNuggets(world.ore[i]) !== this.oreSeen[i]) changed = true;
     }
     if (!changed) return;
-    this.oreSeen.set(world.ore);
+    for (let i = 0; i < world.ore.length; i++) this.oreSeen[i] = oreNuggets(world.ore[i]);
     this.oreDrawn = true;
 
     if (this.oreMesh) {
@@ -262,9 +270,7 @@ export class Renderer {
     const e = new THREE.Euler();
     for (let y = 0; y < MAP_H; y++) {
       for (let x = 0; x < MAP_W; x++) {
-        const amount = world.ore[cellIndex(x, y)];
-        if (amount <= 0) continue;
-        const count = 2 + Math.min(4, Math.floor(amount / 220));
+        const count = oreNuggets(world.ore[cellIndex(x, y)]);
         for (let i = 0; i < count; i++) {
           const s = 0.09 + noise(x, y, 60 + i) * 0.08;
           e.set(noise(x, y, 70 + i) * 0.8, noise(x, y, 80 + i) * 6.28, noise(x, y, 90 + i) * 0.8);
@@ -302,13 +308,20 @@ export class Renderer {
       const target = (-u.facing * Math.PI) / 4;
       let view = this.unitViews.get(u.id);
       if (!view) {
-        const obj = makePioneer();
+        const obj = makeUnit(u.type);
+        let cargo: THREE.Object3D | null = null;
+        let drum: THREE.Object3D | null = null;
+        obj.traverse((o) => {
+          if (o.userData.cargo) cargo = o;
+          if (o.userData.drum) drum = o;
+        });
         const ring = new THREE.Mesh(this.ringGeo, this.overlayMat);
         ring.position.y = 0.04;
+        ring.scale.setScalar((u.type === 'harvester' ? 0.8 : 1) / obj.scale.x);
         ring.renderOrder = 2;
         obj.add(ring);
         this.scene.add(obj);
-        view = { obj, ring, angle: target };
+        view = { obj, ring, angle: target, cargo, drum };
         this.unitViews.set(u.id, view);
       }
       // Turn smoothly towards the new heading, taking the short way round.
@@ -323,6 +336,12 @@ export class Renderer {
         (u.prevY + (u.y - u.prevY) * alpha) / SUB,
       );
       view.ring.visible = ui.selectedUnits.has(u.id);
+      if (view.cargo) {
+        // The heap in the hopper rises as the harvester fills up.
+        view.cargo.visible = u.cargo > 0;
+        view.cargo.scale.y = Math.max(0.02, u.cargo / HARVEST_CAPACITY);
+      }
+      if (view.drum && u.job === 'harvest') view.drum.rotation.y += dt * 9;
     }
     for (const [id, view] of this.unitViews) {
       if (alive.has(id)) continue;

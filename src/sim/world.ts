@@ -2,6 +2,8 @@ import { randInt } from './rng';
 import {
   BUILDING_DEFS,
   BUILDING_TYPES,
+  HARVEST_JOBS,
+  UNIT_TYPES,
   MAP_H,
   MAP_W,
   STARTING_CREDITS,
@@ -28,6 +30,7 @@ export function createWorld(seed: number): World {
     buildings: [],
     ore: new Int32Array(MAP_W * MAP_H),
     blocked: new Uint8Array(MAP_W * MAP_H),
+    occupied: new Int32Array(MAP_W * MAP_H),
   };
   scatterOre(world);
   spawnUnit(world, 'pioneer', 0, START_CX, START_CY);
@@ -59,20 +62,65 @@ function scatterOre(world: World): void {
 }
 
 export function spawnUnit(world: World, type: UnitType, owner: number, cx: number, cy: number): Unit {
+  // If the spot is taken, use the nearest free cell instead.
+  const cell = freeCellNear(world, cx, cy);
+  const x = cell % MAP_W;
+  const y = (cell - x) / MAP_W;
   const unit: Unit = {
     id: world.nextId++,
     type,
     owner,
-    x: cellCentre(cx),
-    y: cellCentre(cy),
-    prevX: cellCentre(cx),
-    prevY: cellCentre(cy),
-    facing: 0,
+    x: cellCentre(x),
+    y: cellCentre(y),
+    prevX: cellCentre(x),
+    prevY: cellCentre(y),
+    facing: 2,
+    cell,
+    stepTo: -1,
     path: [],
+    dest: -1,
+    wait: 0,
     pendingDeploy: false,
+    job: type === 'harvester' ? 'seek' : 'none',
+    cargo: 0,
+    target: -1,
+    home: -1,
+    refinery: 0,
+    timer: 0,
   };
   world.units.push(unit);
+  world.occupied[cell] = unit.id;
   return unit;
+}
+
+export function removeUnit(world: World, unit: Unit): void {
+  const i = world.units.indexOf(unit);
+  if (i === -1) return;
+  world.units.splice(i, 1);
+  world.occupied[unit.cell] = 0;
+  if (unit.stepTo !== -1) world.occupied[unit.stepTo] = 0;
+}
+
+/** The closest cell to a point with no building and no unit on it. */
+export function freeCellNear(world: World, cx: number, cy: number): number {
+  for (let r = 0; r < Math.max(MAP_W, MAP_H); r++) {
+    let best = -1;
+    let bestD = 0;
+    for (let y = cy - r; y <= cy + r; y++) {
+      for (let x = cx - r; x <= cx + r; x++) {
+        if (Math.max(Math.abs(x - cx), Math.abs(y - cy)) !== r || !inBounds(x, y)) continue;
+        const i = cellIndex(x, y);
+        if (world.blocked[i] || world.occupied[i]) continue;
+        const d = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+        if (best === -1 || d < bestD) {
+          best = i;
+          bestD = d;
+        }
+      }
+    }
+    if (best !== -1) return best;
+  }
+  return cellIndex(Math.min(MAP_W - 1, Math.max(0, cx)), Math.min(MAP_H - 1, Math.max(0, cy)));
 }
 
 export function addBuilding(
@@ -141,11 +189,22 @@ export function hashWorld(world: World): number {
   }
   for (const u of world.units) {
     mix(u.id);
+    mix(UNIT_TYPES.indexOf(u.type));
     mix(u.owner);
     mix(u.x);
     mix(u.y);
     mix(u.facing);
+    mix(u.cell);
+    mix(u.stepTo);
+    mix(u.dest);
+    mix(u.wait);
     mix(u.pendingDeploy ? 1 : 0);
+    mix(HARVEST_JOBS.indexOf(u.job));
+    mix(u.cargo);
+    mix(u.target);
+    mix(u.home);
+    mix(u.refinery);
+    mix(u.timer);
     mix(u.path.length);
     for (const c of u.path) mix(c);
   }

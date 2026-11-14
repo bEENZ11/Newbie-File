@@ -90,8 +90,10 @@ Total supply is compared with total demand. If demand is higher, the power bar t
 
 - Ore cells hold a finite amount and shrink visibly as they're harvested.
 - A harvester finds the nearest ore, fills up over a few seconds, drives to the nearest refinery, docks and unloads. Credits tick up during unloading. It then repeats, all without player input.
-- The player can redirect a harvester by right-clicking ore or a refinery.
-- Only one harvester docks at a refinery at a time, and others queue.
+- After unloading it goes back to the field it was last working, and moves to the next nearest ore when a cell runs dry.
+- The player can redirect a harvester by right-clicking ore or a refinery. A plain move order parks it until it is given a new job.
+- Each refinery has a dock cell at its front. One harvester unloads there at a time while others queue beside it, and nothing can be built on a dock.
+- If its refinery is sold, a harvester keeps its load and delivers to another when one exists.
 - No storage limit in phase 1. Silos can come later if we want that pressure.
 
 ### Units
@@ -105,7 +107,7 @@ Total supply is compared with total demand. If demand is higher, the power bar t
 
 - Each production building has its own queue, so infantry and vehicles build in parallel.
 - New units appear at the building's exit and walk to its rally point.
-- Units find their way around buildings and each other using grid pathfinding.
+- Units find their way around buildings and each other using grid pathfinding. No two units share a cell: a blocked unit waits briefly, then finds a way round.
 - Units can move but not fight yet. Combat is the first job of phase 2.
 
 ### Controls

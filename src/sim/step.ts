@@ -1,4 +1,5 @@
-import { findPath } from './pathfinding';
+import { orderHarvester, tickHarvesters } from './harvest';
+import { haltUnit, isSettled, moveUnit, setDestination } from './movement';
 import {
   cancelProduction,
   holdProduction,
@@ -8,28 +9,17 @@ import {
   tickBuildings,
   tickProduction,
 } from './production';
-import { addBuilding } from './world';
+import { addBuilding, removeUnit } from './world';
 import {
   BUILDING_DEFS,
-  MAP_H,
   MAP_W,
-  UNIT_DEFS,
-  cellCentre,
   cellIndex,
   inBounds,
-  toCell,
   type Command,
   type SimEvent,
   type Unit,
   type World,
 } from './types';
-
-// Facing lookup indexed by [sign(dy) + 1][sign(dx) + 1].
-const FACING = [
-  [5, 6, 7],
-  [4, 0, 0],
-  [3, 2, 1],
-];
 
 /** Advances the world by exactly one tick. */
 export function stepWorld(world: World, commands: readonly Command[], events: SimEvent[]): void {
@@ -38,12 +28,14 @@ export function stepWorld(world: World, commands: readonly Command[], events: Si
   for (const unit of world.units) {
     unit.prevX = unit.x;
     unit.prevY = unit.y;
-    moveUnit(unit);
+    moveUnit(world, unit);
   }
 
-  // Deploying removes units, so it runs after movement on a copy of the list.
+  tickHarvesters(world);
+
+  // Deploying removes units, so it runs on a copy of the list.
   for (const unit of world.units.slice()) {
-    if (unit.pendingDeploy && unit.path.length === 0) tryDeploy(world, unit, events);
+    if (unit.pendingDeploy && isSettled(unit)) tryDeploy(world, unit, events);
   }
 
   tickProduction(world, events);
@@ -58,18 +50,20 @@ function applyCommand(world: World, cmd: Command, events: SimEvent[]): void {
   if (!world.players[cmd.player]) return;
   switch (cmd.type) {
     case 'move':
+      if (!inBounds(cmd.cx, cmd.cy)) break;
       for (const id of cmd.unitIds) {
         const unit = world.units.find((u) => u.id === id);
         if (!unit || unit.owner !== cmd.player) continue;
         unit.pendingDeploy = false;
-        setDestination(world, unit, cmd.cx, cmd.cy);
+        if (unit.type === 'harvester') orderHarvester(world, unit, cmd.cx, cmd.cy);
+        else setDestination(world, unit, cmd.cx, cmd.cy);
       }
       break;
     case 'deploy': {
       const unit = world.units.find((u) => u.id === cmd.unitId);
       if (!unit || unit.owner !== cmd.player || unit.type !== 'pioneer') break;
       // Finish the step in progress so it settles on a cell centre first.
-      unit.path.length = Math.min(unit.path.length, 1);
+      haltUnit(unit);
       unit.pendingDeploy = true;
       break;
     }
@@ -83,7 +77,7 @@ function applyCommand(world: World, cmd: Command, events: SimEvent[]): void {
       cancelProduction(world, cmd.player);
       break;
     case 'place':
-      if (placeProduction(world, cmd.player, cmd.cx, cmd.cy, events)) rerouteUnits(world);
+      placeProduction(world, cmd.player, cmd.cx, cmd.cy, events);
       break;
     case 'sell':
       sellBuilding(world, cmd.player, cmd.buildingId);
@@ -91,51 +85,12 @@ function applyCommand(world: World, cmd: Command, events: SimEvent[]): void {
   }
 }
 
-/** Sends units round a building that has just appeared across their route. */
-function rerouteUnits(world: World): void {
-  for (const unit of world.units) {
-    if (!unit.path.some((c) => world.blocked[c])) continue;
-    const dest = unit.path[unit.path.length - 1];
-    const dx = dest % MAP_W;
-    setDestination(world, unit, dx, (dest - dx) / MAP_W);
-  }
-}
-
-function setDestination(world: World, unit: Unit, cx: number, cy: number): void {
-  // If the unit is between cells, let it finish that step and plan from there.
-  // This keeps it on the grid so it never clips the corner of a building.
-  const midStep = unit.path.length > 0 ? unit.path[0] : -1;
-  const start = midStep !== -1 ? midStep : cellIndex(toCell(unit.x), toCell(unit.y));
-  const route = findPath(world.blocked, MAP_W, MAP_H, start, cx, cy);
-  unit.path = midStep !== -1 ? [midStep, ...route] : route;
-}
-
-function moveUnit(unit: Unit): void {
-  if (unit.path.length === 0) return;
-  const next = unit.path[0];
-  const nx = next % MAP_W;
-  const tx = cellCentre(nx);
-  const ty = cellCentre((next - nx) / MAP_W);
-  const dx = tx - unit.x;
-  const dy = ty - unit.y;
-  const speed = UNIT_DEFS[unit.type].speed;
-  // Diagonal steps are scaled by roughly 1/sqrt(2), in whole numbers.
-  const step = dx !== 0 && dy !== 0 ? (speed * 181) >> 8 : speed;
-  if (dx !== 0 || dy !== 0) unit.facing = FACING[Math.sign(dy) + 1][Math.sign(dx) + 1];
-  unit.x += Math.sign(dx) * Math.min(Math.abs(dx), step);
-  unit.y += Math.sign(dy) * Math.min(Math.abs(dy), step);
-  if (unit.x === tx && unit.y === ty) unit.path.shift();
-}
-
 /** The cells a deploying Pioneer would occupy, as a top-left cell. */
 export function deployFootprint(unit: Unit): { cx: number; cy: number; w: number; h: number } {
   const def = BUILDING_DEFS.conyard;
-  return {
-    cx: toCell(unit.x) - (def.w >> 1),
-    cy: toCell(unit.y) - (def.h >> 1),
-    w: def.w,
-    h: def.h,
-  };
+  const x = unit.cell % MAP_W;
+  const y = (unit.cell - x) / MAP_W;
+  return { cx: x - (def.w >> 1), cy: y - (def.h >> 1), w: def.w, h: def.h };
 }
 
 export function canDeploy(world: World, unit: Unit): boolean {
@@ -145,9 +100,7 @@ export function canDeploy(world: World, unit: Unit): boolean {
       if (!inBounds(x, y)) return false;
       const i = cellIndex(x, y);
       if (world.blocked[i] || world.ore[i] > 0) return false;
-      for (const other of world.units) {
-        if (other !== unit && toCell(other.x) === x && toCell(other.y) === y) return false;
-      }
+      if (world.occupied[i] !== 0 && world.occupied[i] !== unit.id) return false;
     }
   }
   return true;
@@ -160,7 +113,7 @@ function tryDeploy(world: World, unit: Unit, events: SimEvent[]): void {
     events.push({ type: 'deployBlocked', ...f });
     return;
   }
-  world.units.splice(world.units.indexOf(unit), 1);
+  removeUnit(world, unit);
   const building = addBuilding(world, 'conyard', unit.owner, f.cx, f.cy);
   events.push({ type: 'deployed', unitId: unit.id, buildingId: building.id });
 }

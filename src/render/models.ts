@@ -3,7 +3,7 @@
 // Buildings are centred on their footprint, with their front facing south (+z).
 
 import * as THREE from 'three';
-import type { BuildingType } from '../sim/types';
+import type { BuildingType, UnitType } from '../sim/types';
 
 const TEAM = 0x3f86e0;
 const TEAM_DARK = 0x24569c;
@@ -119,6 +119,42 @@ function buildPioneer(): THREE.Group {
   g.add(box(1.1, 0.08, 0.1, HAZARD, -0.2, 0.86, 0));
   g.add(box(0.14, 0.14, 0.18, STEEL_DARK, -0.72, 0.86, 0));
   g.scale.setScalar(1.12);
+  return finish(g);
+}
+
+/**
+ * userData.cargo marks the ore heap, which grows as the hopper fills, and
+ * userData.drum marks the cutting drum, which spins while digging.
+ */
+function buildHarvester(): THREE.Group {
+  const g = new THREE.Group();
+  // Tracks and chassis.
+  g.add(box(1.36, 0.24, 0.24, RUBBER, -0.04, 0, -0.36));
+  g.add(box(1.36, 0.24, 0.24, RUBBER, -0.04, 0, 0.36));
+  g.add(box(1.26, 0.18, 0.56, TEAM_DARK, -0.04, 0.14, 0));
+  // Open hopper at the back.
+  g.add(box(0.78, 0.36, 0.06, TEAM, -0.3, 0.32, -0.34));
+  g.add(box(0.78, 0.36, 0.06, TEAM, -0.3, 0.32, 0.34));
+  g.add(box(0.06, 0.36, 0.74, TEAM, -0.69, 0.32, 0));
+  g.add(box(0.06, 0.36, 0.74, TEAM_DARK, 0.09, 0.32, 0));
+  g.add(box(0.72, 0.04, 0.62, STEEL_DARK, -0.3, 0.32, 0));
+  const cargo = box(0.7, 0.36, 0.6, 0xf0b429, -0.3, 0.34, 0);
+  cargo.userData.cargo = true;
+  g.add(cargo);
+  // Cab.
+  g.add(box(0.3, 0.34, 0.5, TEAM_LIGHT, 0.28, 0.32, 0));
+  g.add(box(0.05, 0.14, 0.4, GLASS, 0.44, 0.46, 0));
+  // Cutting drum on arms at the front.
+  g.add(box(0.3, 0.07, 0.07, STEEL, 0.58, 0.2, -0.3));
+  g.add(box(0.3, 0.07, 0.07, STEEL, 0.58, 0.2, 0.3));
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.74, 8), mat(STEEL_LIGHT));
+  drum.rotation.x = Math.PI / 2;
+  drum.position.set(0.78, 0.19, 0);
+  drum.userData.drum = true;
+  const teeth = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.66, 0.05), mat(HAZARD));
+  drum.add(teeth);
+  g.add(drum);
+  g.scale.setScalar(1.15);
   return finish(g);
 }
 
@@ -249,13 +285,22 @@ const BUILDERS: Record<BuildingType, () => THREE.Group> = {
   factory: buildFactory,
 };
 
-let pioneerTemplate: THREE.Group | null = null;
+const UNIT_BUILDERS: Record<UnitType, () => THREE.Group> = {
+  pioneer: buildPioneer,
+  harvester: buildHarvester,
+};
+
+const unitTemplates = new Map<UnitType, THREE.Group>();
 const buildingTemplates = new Map<BuildingType, THREE.Group>();
 
 // Clones share geometry and materials, so extra copies are cheap.
-export function makePioneer(): THREE.Group {
-  pioneerTemplate ??= buildPioneer();
-  return pioneerTemplate.clone();
+export function makeUnit(type: UnitType): THREE.Group {
+  let template = unitTemplates.get(type);
+  if (!template) {
+    template = UNIT_BUILDERS[type]();
+    unitTemplates.set(type, template);
+  }
+  return template.clone();
 }
 
 export function makeBuilding(type: BuildingType): THREE.Group {

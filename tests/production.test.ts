@@ -29,7 +29,11 @@ function grant(sim: Sim, type: BuildingType, cx: number, cy: number): void {
 function buildAt(sim: Sim, type: BuildingType, cx: number, cy: number): void {
   sim.issue({ type: 'build', player: 0, building: type });
   run(sim, BUILDING_DEFS[type].produceTicks * 5);
-  sim.issue({ type: 'place', player: 0, cx, cy });
+  // A passing harvester can briefly be in the way, so keep trying.
+  for (let i = 0; i < 400 && sim.world.players[0].production; i++) {
+    sim.issue({ type: 'place', player: 0, cx, cy });
+    sim.step();
+  }
   run(sim, BUILDING_DEFS[type].buildTicks + 2);
 }
 
@@ -213,7 +217,8 @@ describe('whole build order', () => {
       'barracks',
       'factory',
     ]);
-    expect(sim.world.players[0].credits).toBe(STARTING_CREDITS - 250 - 1500 - 400 - 1800);
+    // The refinery's harvester has been earning in the meantime.
+    expect(sim.world.players[0].credits).toBeGreaterThan(STARTING_CREDITS - 250 - 1500 - 400 - 1800);
     const copy = Sim.replay(11, sim.log, sim.world.tick);
     expect(copy.hash()).toBe(sim.hash());
   });

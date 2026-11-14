@@ -167,9 +167,13 @@ export class Input {
       ui.selectedBuilding = null;
       return;
     }
+    // Clicking a building's wall or roof counts as clicking the building,
+    // which is how a harvester is sent to a refinery.
+    const picked = this.renderer.pickBuilding(ui, sx, sy);
+    const building = this.sim.world.buildings.find((b) => b.id === picked);
     const hit = this.renderer.screenToGround(ui, sx, sy);
-    const cx = Math.floor(hit.x);
-    const cy = Math.floor(hit.z);
+    const cx = building ? building.cx : Math.floor(hit.x);
+    const cy = building ? building.cy : Math.floor(hit.z);
     if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) return;
     this.sim.issue({ type: 'move', player: LOCAL_PLAYER, unitIds: [...ui.selectedUnits], cx, cy });
     ui.markers.push({ x: cx + 0.5, z: cy + 0.5, t: performance.now() });

@@ -3,7 +3,7 @@ import { Renderer } from './render/renderer';
 import { Sidebar } from './sidebar';
 import { checkPlacement, powerOf } from './sim/production';
 import { Sim } from './sim/sim';
-import { BUILDING_DEFS, TICK_RATE } from './sim/types';
+import { BUILDING_DEFS, HARVEST_CAPACITY, TICK_RATE } from './sim/types';
 import { START_CX, START_CY } from './sim/world';
 import { LOCAL_PLAYER, createUi, placementOrigin } from './ui';
 
@@ -65,6 +65,10 @@ function currentHint(): string {
     return ui.selectedUnits.has(pioneer.id)
       ? 'Right-click to drive. Press D or double-click the Pioneer to deploy'
       : 'Left-click the Pioneer to select it';
+  }
+  const picked = world.units.find((u) => ui.selectedUnits.has(u.id) && u.type === 'harvester');
+  if (picked) {
+    return `Harvester carrying ${picked.cargo} of ${HARVEST_CAPACITY}. Right-click ore to dig or a refinery to unload`;
   }
   if (!yard) return 'No Construction Yard. Nothing more can be built';
   if (yard.progress < yard.total && !yard.selling) return `${BUILDING_DEFS.conyard.name} deploying`;

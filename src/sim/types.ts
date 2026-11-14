@@ -13,8 +13,43 @@ export const BUILD_RANGE = 2;
 export const SELL_REFUND_PERCENT = 50;
 /** Production never drops below this share of full speed, out of 256. */
 export const MIN_POWER_RATE = 64;
+/** Credits' worth of ore a harvester carries when full. */
+export const HARVEST_CAPACITY = 500;
+/** Ore gathered per tick while harvesting. */
+export const GATHER_RATE = 5;
+/** Ore turned into credits per tick while unloading. */
+export const UNLOAD_RATE = 10;
+/** Ticks a unit waits behind another before trying a way round. */
+export const BLOCKED_PATIENCE = 8;
 
-export type UnitType = 'pioneer';
+export type UnitType = 'pioneer' | 'harvester';
+export const UNIT_TYPES: readonly UnitType[] = ['pioneer', 'harvester'];
+
+/**
+ * What a harvester is doing. 'manual' means the player moved it by hand, so
+ * it waits for orders. 'idle' means it has nothing to do and will look again.
+ */
+export type HarvestJob =
+  | 'none'
+  | 'seek'
+  | 'toOre'
+  | 'harvest'
+  | 'return'
+  | 'toRefinery'
+  | 'unload'
+  | 'idle'
+  | 'manual';
+export const HARVEST_JOBS: readonly HarvestJob[] = [
+  'none',
+  'seek',
+  'toOre',
+  'harvest',
+  'return',
+  'toRefinery',
+  'unload',
+  'idle',
+  'manual',
+];
 export type BuildingType = 'conyard' | 'power' | 'refinery' | 'barracks' | 'factory';
 
 /** Fixed order, used for the sidebar and for hashing. */
@@ -49,6 +84,7 @@ export interface BuildingDef {
 
 export const UNIT_DEFS: Record<UnitType, UnitDef> = {
   pioneer: { name: 'Pioneer', speed: 32 },
+  harvester: { name: 'Harvester', speed: 40 },
 };
 
 // Placeholder numbers of our own, to be tuned once the whole loop is playable.
@@ -116,9 +152,27 @@ export interface Unit {
   prevY: number;
   /** 0 is east, then clockwise in 45 degree steps. */
   facing: number;
+  /** The cell this unit stands on and holds. No two units share a cell. */
+  cell: number;
+  /** The cell it is part-way into, also held, or -1 when standing still. */
+  stepTo: number;
   /** Cell indices still to visit, nearest first. */
   path: number[];
+  /** Where it is ultimately heading, or -1. Used when it has to find a new route. */
+  dest: number;
+  /** Ticks spent waiting for another unit to move out of the way. */
+  wait: number;
   pendingDeploy: boolean;
+  // Harvesters only.
+  job: HarvestJob;
+  cargo: number;
+  /** The ore cell it is working, or -1. */
+  target: number;
+  /** The ore cell it last worked, so it returns to the same field. */
+  home: number;
+  /** The refinery it is delivering to, or 0. */
+  refinery: number;
+  timer: number;
 }
 
 export interface Building {
@@ -166,6 +220,8 @@ export interface World {
   ore: Int32Array;
   /** 1 where a building stands. Derived from buildings. */
   blocked: Uint8Array;
+  /** The id of the unit holding each cell, or 0. Derived from units. */
+  occupied: Int32Array;
 }
 
 // Every command names the player giving it, ready for multiplayer.
@@ -194,3 +250,6 @@ export const cellCentre = (c: number): number => c * SUB + (SUB >> 1);
 export const toCell = (sub: number): number => Math.floor(sub / SUB);
 /** A building counts once its build-up has finished and it is not being sold. */
 export const isActive = (b: Building): boolean => !b.selling && b.progress >= b.total;
+
+/** The cell in front of a refinery where a harvester pulls up to unload. */
+export const dockCell = (b: Building): { x: number; y: number } => ({ x: b.cx + 2, y: b.cy + b.h });
