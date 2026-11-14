@@ -1,308 +1,391 @@
+import * as THREE from 'three';
 import { canDeploy, deployFootprint } from '../sim/step';
-import { MAP_H, MAP_W, SUB, cellIndex, type Building, type Unit, type World } from '../sim/types';
+import { MAP_H, MAP_W, SUB, cellIndex, type World } from '../sim/types';
 import type { UiState } from '../ui';
+import { frameGeometry, makeConyard, makePioneer } from './models';
 
-/** Pixels per cell. Purely a display choice, the simulation never sees it. */
-export const CELL = 32;
-export const MAP_PX_W = MAP_W * CELL;
-export const MAP_PX_H = MAP_H * CELL;
-const TO_PX = CELL / SUB;
-
-const TEAM = '#3f86e0';
-const TEAM_LIGHT = '#8fbcf5';
-const TEAM_DARK = '#1f4f94';
+// The view is 3D with a fixed camera: looking north, tilted down at the ground.
+// One cell is one world unit, x runs east and z runs south.
+const PITCH = (44 * Math.PI) / 180;
+export const SIN_PITCH = Math.sin(PITCH);
+const COS_PITCH = Math.cos(PITCH);
+const CAMERA_DISTANCE = 120;
 
 const MARKER_MS = 450;
 const FLASH_MS = 600;
+const TURN_RATE = 9;
+const TERRAIN_TEXELS = 32;
 
-/** Cheap repeatable noise so terrain and ore look the same on every redraw. */
+/** Cheap repeatable noise so terrain and ore look the same every time. */
 function noise(x: number, y: number, salt: number): number {
   let h = Math.imul(x * 374761393 + y * 668265263 + salt * 2246822519, 3266489917);
   h = Math.imul(h ^ (h >>> 15), 2246822519);
   return ((h ^ (h >>> 13)) >>> 0) / 4294967296;
 }
 
+interface UnitView {
+  obj: THREE.Group;
+  ring: THREE.Mesh;
+  angle: number;
+}
+
+interface BuildingView {
+  obj: THREE.Group;
+  stages: THREE.Object3D[];
+  arm: THREE.Object3D | null;
+  frame: THREE.Mesh;
+}
+
 export class Renderer {
-  private ctx: CanvasRenderingContext2D;
-  private terrain: HTMLCanvasElement;
-  private dpr = 1;
+  private gl: THREE.WebGLRenderer;
+  private scene = new THREE.Scene();
+  private camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 400);
+  private sun = new THREE.DirectionalLight(0xfff0d6, 3.1);
+  private raycaster = new THREE.Raycaster();
+  private ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  private tmp = new THREE.Vector3();
+  private ndc = new THREE.Vector2();
+
+  private unitViews = new Map<number, UnitView>();
+  private buildingViews = new Map<number, BuildingView>();
+  private oreMesh: THREE.InstancedMesh | null = null;
+  private oreSeen = new Int32Array(MAP_W * MAP_H);
+  private oreDrawn = false;
+
+  private ringGeo = new THREE.RingGeometry(1.08, 1.14, 56).rotateX(-Math.PI / 2);
+  private overlayMat = new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false });
+  /** Building outlines sit on the ground, so walls in front hide them. */
+  private frameMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  private preview: THREE.Mesh;
+  private previewFrame: THREE.Mesh;
+  private flashPool: THREE.Mesh[] = [];
+  private markerPool: THREE.Mesh[] = [];
+  private lastDraw = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
-    this.ctx = canvas.getContext('2d')!;
-    this.terrain = this.paintTerrain();
+    this.gl = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.gl.shadowMap.enabled = true;
+    this.gl.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.scene.background = new THREE.Color(0x0e1012);
+
+    this.scene.add(new THREE.HemisphereLight(0xdfeaff, 0x3d3a2c, 0.95));
+    this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(2048, 2048);
+    const sc = this.sun.shadow.camera;
+    sc.left = -34;
+    sc.right = 34;
+    sc.top = 34;
+    sc.bottom = -34;
+    sc.near = 1;
+    sc.far = 120;
+    this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.normalBias = 0.03;
+    this.scene.add(this.sun, this.sun.target);
+
+    this.scene.add(this.makeTerrain());
+
+    const flat = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+    this.preview = new THREE.Mesh(
+      flat,
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.16, depthWrite: false }),
+    );
+    this.previewFrame = new THREE.Mesh(
+      frameGeometry(1, 1, 0.03),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.85, depthWrite: false }),
+    );
+    this.preview.visible = this.previewFrame.visible = false;
+    this.scene.add(this.preview, this.previewFrame);
+
+    for (let i = 0; i < 4; i++) {
+      const flash = new THREE.Mesh(
+        flat,
+        new THREE.MeshBasicMaterial({ color: 0xe8423a, transparent: true, depthWrite: false }),
+      );
+      const marker = new THREE.Mesh(
+        new THREE.RingGeometry(0.82, 1, 32).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: 0x7dff8e, transparent: true, depthTest: false }),
+      );
+      flash.visible = marker.visible = false;
+      this.flashPool.push(flash);
+      this.markerPool.push(marker);
+      this.scene.add(flash, marker);
+    }
   }
 
   resize(ui: UiState): void {
-    this.dpr = window.devicePixelRatio || 1;
     ui.viewW = this.canvas.clientWidth;
     ui.viewH = this.canvas.clientHeight;
-    this.canvas.width = Math.round(ui.viewW * this.dpr);
-    this.canvas.height = Math.round(ui.viewH * this.dpr);
+    this.gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.gl.setSize(ui.viewW, ui.viewH, false);
   }
 
-  private paintTerrain(): HTMLCanvasElement {
+  private makeTerrain(): THREE.Mesh {
     const c = document.createElement('canvas');
-    c.width = MAP_PX_W;
-    c.height = MAP_PX_H;
+    c.width = MAP_W * TERRAIN_TEXELS;
+    c.height = MAP_H * TERRAIN_TEXELS;
     const g = c.getContext('2d')!;
+    const t = TERRAIN_TEXELS;
     for (let y = 0; y < MAP_H; y++) {
       for (let x = 0; x < MAP_W; x++) {
-        const light = 28 + noise(x, y, 1) * 1.6;
-        const hue = 92 + noise(x, y, 2) * 5;
-        g.fillStyle = `hsl(${hue} 24% ${light}%)`;
-        g.fillRect(x * CELL, y * CELL, CELL, CELL);
-        for (let i = 0; i < 3; i++) {
+        const light = 31 + noise(x, y, 1) * 1.1;
+        const hue = 92 + noise(x, y, 2) * 4;
+        g.fillStyle = `hsl(${hue} 30% ${light}%)`;
+        g.fillRect(x * t, y * t, t, t);
+        for (let i = 0; i < 9; i++) {
           g.fillStyle = noise(x, y, 10 + i) > 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.09)';
-          const sx = x * CELL + Math.floor(noise(x, y, 20 + i) * (CELL - 4));
-          const sy = y * CELL + Math.floor(noise(x, y, 30 + i) * (CELL - 4));
-          g.fillRect(sx, sy, 3, 2);
+          const sx = x * t + Math.floor(noise(x, y, 20 + i) * (t - 2));
+          const sy = y * t + Math.floor(noise(x, y, 30 + i) * (t - 2));
+          g.fillRect(sx, sy, 2 + (i % 2), 1 + (i % 3 === 0 ? 1 : 0));
         }
       }
     }
-    g.strokeStyle = 'rgba(0,0,0,0.05)';
-    g.lineWidth = 1;
-    g.beginPath();
-    for (let i = 0; i <= MAP_W; i++) {
-      g.moveTo(i * CELL + 0.5, 0);
-      g.lineTo(i * CELL + 0.5, MAP_PX_H);
+    g.fillStyle = 'rgba(0,0,0,0.055)';
+    for (let i = 0; i <= MAP_W; i++) g.fillRect(i * t, 0, 1, c.height);
+    for (let i = 0; i <= MAP_H; i++) g.fillRect(0, i * t, c.width, 1);
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = this.gl.capabilities.getMaxAnisotropy();
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(MAP_W, MAP_H).rotateX(-Math.PI / 2),
+      new THREE.MeshLambertMaterial({ map: tex }),
+    );
+    mesh.position.set(MAP_W / 2, 0, MAP_H / 2);
+    mesh.receiveShadow = true;
+    return mesh;
+  }
+
+  private applyCamera(ui: UiState): void {
+    const cam = this.camera;
+    cam.left = -ui.viewW / ui.zoom / 2;
+    cam.right = ui.viewW / ui.zoom / 2;
+    cam.top = ui.viewH / ui.zoom / 2;
+    cam.bottom = -ui.viewH / ui.zoom / 2;
+    cam.position.set(
+      ui.camX,
+      SIN_PITCH * CAMERA_DISTANCE,
+      ui.camZ + COS_PITCH * CAMERA_DISTANCE,
+    );
+    cam.lookAt(ui.camX, 0, ui.camZ);
+    cam.updateProjectionMatrix();
+    cam.updateMatrixWorld();
+  }
+
+  /** The point on the ground under a screen position, in cells. */
+  screenToGround(ui: UiState, sx: number, sy: number): { x: number; z: number } {
+    this.applyCamera(ui);
+    this.ndc.set((sx / ui.viewW) * 2 - 1, -((sy / ui.viewH) * 2 - 1));
+    this.raycaster.setFromCamera(this.ndc, this.camera);
+    const hit = this.raycaster.ray.intersectPlane(this.ground, this.tmp);
+    return hit ? { x: hit.x, z: hit.z } : { x: -1, z: -1 };
+  }
+
+  /** Where a world position lands on screen, in pixels. */
+  worldToScreen(ui: UiState, x: number, y: number, z: number): { x: number; y: number } {
+    this.applyCamera(ui);
+    this.tmp.set(x, y, z).project(this.camera);
+    return { x: ((this.tmp.x + 1) / 2) * ui.viewW, y: ((1 - this.tmp.y) / 2) * ui.viewH };
+  }
+
+  /** The building under a screen position, including its walls and roof. */
+  pickBuilding(ui: UiState, sx: number, sy: number): number | null {
+    this.applyCamera(ui);
+    this.ndc.set((sx / ui.viewW) * 2 - 1, -((sy / ui.viewH) * 2 - 1));
+    this.raycaster.setFromCamera(this.ndc, this.camera);
+    let best: number | null = null;
+    let bestDist = Infinity;
+    for (const [id, view] of this.buildingViews) {
+      const hit = this.raycaster.intersectObject(view.obj, true)[0];
+      if (hit && hit.distance < bestDist) {
+        best = id;
+        bestDist = hit.distance;
+      }
     }
-    for (let i = 0; i <= MAP_H; i++) {
-      g.moveTo(0, i * CELL + 0.5);
-      g.lineTo(MAP_PX_W, i * CELL + 0.5);
-    }
-    g.stroke();
-    return c;
+    return best;
   }
 
   draw(world: World, ui: UiState, alpha: number, now: number): void {
-    const g = this.ctx;
-    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    g.fillStyle = '#101214';
-    g.fillRect(0, 0, ui.viewW, ui.viewH);
+    const dt = Math.min(0.1, (now - this.lastDraw) / 1000);
+    this.lastDraw = now;
 
-    const camX = Math.round(ui.camX);
-    const camY = Math.round(ui.camY);
-    g.translate(-camX, -camY);
-    g.drawImage(this.terrain, 0, 0);
+    this.applyCamera(ui);
+    this.sun.position.set(ui.camX - 24, 30, ui.camZ + 20);
+    this.sun.target.position.set(ui.camX, 0, ui.camZ);
+    this.sun.target.updateMatrixWorld();
 
-    const x0 = Math.max(0, Math.floor(camX / CELL));
-    const y0 = Math.max(0, Math.floor(camY / CELL));
-    const x1 = Math.min(MAP_W - 1, Math.floor((camX + ui.viewW) / CELL));
-    const y1 = Math.min(MAP_H - 1, Math.floor((camY + ui.viewH) / CELL));
-    for (let y = y0; y <= y1; y++) {
-      for (let x = x0; x <= x1; x++) {
+    this.syncOre(world);
+    this.syncUnits(world, ui, alpha, dt);
+    this.syncBuildings(world, ui, now);
+    this.syncOverlays(world, ui, now);
+
+    this.gl.render(this.scene, this.camera);
+  }
+
+  private syncOre(world: World): void {
+    let changed = !this.oreDrawn;
+    for (let i = 0; i < world.ore.length && !changed; i++) {
+      if (world.ore[i] !== this.oreSeen[i]) changed = true;
+    }
+    if (!changed) return;
+    this.oreSeen.set(world.ore);
+    this.oreDrawn = true;
+
+    if (this.oreMesh) {
+      this.scene.remove(this.oreMesh);
+      this.oreMesh.dispose();
+    }
+    const spots: THREE.Matrix4[] = [];
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    for (let y = 0; y < MAP_H; y++) {
+      for (let x = 0; x < MAP_W; x++) {
         const amount = world.ore[cellIndex(x, y)];
-        if (amount > 0) this.drawOre(x, y, amount);
+        if (amount <= 0) continue;
+        const count = 2 + Math.min(4, Math.floor(amount / 220));
+        for (let i = 0; i < count; i++) {
+          const s = 0.09 + noise(x, y, 60 + i) * 0.08;
+          e.set(noise(x, y, 70 + i) * 0.8, noise(x, y, 80 + i) * 6.28, noise(x, y, 90 + i) * 0.8);
+          spots.push(
+            new THREE.Matrix4().compose(
+              new THREE.Vector3(
+                x + 0.15 + noise(x, y, 40 + i) * 0.7,
+                s * 0.7,
+                y + 0.15 + noise(x, y, 50 + i) * 0.7,
+              ),
+              q.setFromEuler(e),
+              new THREE.Vector3(s, s * 1.5, s),
+            ),
+          );
+        }
       }
     }
+    const material = new THREE.MeshLambertMaterial({
+      color: 0xf0b429,
+      emissive: 0x6b4500,
+      flatShading: true,
+    });
+    this.oreMesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(1), material, spots.length);
+    spots.forEach((m, i) => this.oreMesh!.setMatrixAt(i, m));
+    this.oreMesh.castShadow = true;
+    this.oreMesh.receiveShadow = true;
+    this.scene.add(this.oreMesh);
+  }
 
-    for (const unit of world.units) {
-      if (unit.type === 'pioneer' && ui.selectedUnits.has(unit.id) && unit.path.length === 0) {
-        this.drawDeployPreview(world, unit);
+  private syncUnits(world: World, ui: UiState, alpha: number, dt: number): void {
+    const alive = new Set<number>();
+    for (const u of world.units) {
+      alive.add(u.id);
+      // Facing 0 is east, then clockwise as seen from above.
+      const target = (-u.facing * Math.PI) / 4;
+      let view = this.unitViews.get(u.id);
+      if (!view) {
+        const obj = makePioneer();
+        const ring = new THREE.Mesh(this.ringGeo, this.overlayMat);
+        ring.position.y = 0.04;
+        ring.renderOrder = 2;
+        obj.add(ring);
+        this.scene.add(obj);
+        view = { obj, ring, angle: target };
+        this.unitViews.set(u.id, view);
+      }
+      // Turn smoothly towards the new heading, taking the short way round.
+      let diff = target - view.angle;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      const turn = TURN_RATE * dt;
+      view.angle += Math.abs(diff) <= turn ? diff : Math.sign(diff) * turn;
+      view.obj.rotation.y = view.angle;
+      view.obj.position.set(
+        (u.prevX + (u.x - u.prevX) * alpha) / SUB,
+        0,
+        (u.prevY + (u.y - u.prevY) * alpha) / SUB,
+      );
+      view.ring.visible = ui.selectedUnits.has(u.id);
+    }
+    for (const [id, view] of this.unitViews) {
+      if (alive.has(id)) continue;
+      this.scene.remove(view.obj);
+      this.unitViews.delete(id);
+    }
+  }
+
+  private syncBuildings(world: World, ui: UiState, now: number): void {
+    const alive = new Set<number>();
+    for (const b of world.buildings) {
+      alive.add(b.id);
+      let view = this.buildingViews.get(b.id);
+      if (!view) {
+        const obj = makeConyard();
+        obj.position.set(b.cx + b.w / 2, 0, b.cy + b.h / 2);
+        const stages: THREE.Object3D[] = [];
+        let arm: THREE.Object3D | null = null;
+        obj.traverse((o) => {
+          if (typeof o.userData.stage === 'number') stages[o.userData.stage] = o;
+          if (o.userData.arm) arm = o;
+        });
+        const frame = new THREE.Mesh(frameGeometry(b.w + 0.1, b.h + 0.1, 0.06), this.frameMat);
+        frame.position.y = 0.03;
+        obj.add(frame);
+        this.scene.add(obj);
+        view = { obj, stages, arm, frame };
+        this.buildingViews.set(b.id, view);
+      }
+      // Build-up: each part rises out of the ground in turn.
+      const p = b.progress / b.total;
+      const n = view.stages.length;
+      view.stages.forEach((stage, i) => {
+        const t = Math.min(1, Math.max(0, (p * (n + 1) - i) / 2));
+        const eased = 1 - (1 - t) * (1 - t);
+        stage.visible = t > 0;
+        stage.scale.y = Math.max(0.001, eased);
+      });
+      if (view.arm && p >= 1) view.arm.rotation.y = Math.sin(now * 0.0005 + b.id) * 1.1 - 0.5;
+      view.frame.visible = ui.selectedBuilding === b.id;
+    }
+    for (const [id, view] of this.buildingViews) {
+      if (alive.has(id)) continue;
+      this.scene.remove(view.obj);
+      this.buildingViews.delete(id);
+    }
+  }
+
+  private syncOverlays(world: World, ui: UiState, now: number): void {
+    // Footprint preview for a selected, stationary Pioneer.
+    const pioneer = world.units.find(
+      (u) => u.type === 'pioneer' && ui.selectedUnits.has(u.id) && u.path.length === 0,
+    );
+    this.preview.visible = this.previewFrame.visible = !!pioneer;
+    if (pioneer) {
+      const f = deployFootprint(pioneer);
+      const colour = canDeploy(world, pioneer) ? 0x7dff8e : 0xff5a50;
+      for (const mesh of [this.preview, this.previewFrame]) {
+        mesh.position.set(f.cx + f.w / 2, 0.02, f.cy + f.h / 2);
+        mesh.scale.set(f.w, 1, f.h);
+        (mesh.material as THREE.MeshBasicMaterial).color.setHex(colour);
       }
     }
-
-    for (const b of world.buildings) this.drawBuilding(b, ui.selectedBuilding === b.id);
-    for (const u of world.units) this.drawUnit(u, alpha, ui.selectedUnits.has(u.id));
 
     ui.flashes = ui.flashes.filter((f) => now - f.t < FLASH_MS);
-    for (const f of ui.flashes) {
+    this.flashPool.forEach((mesh, i) => {
+      const f = ui.flashes[i];
+      mesh.visible = !!f;
+      if (!f) return;
       const fade = 1 - (now - f.t) / FLASH_MS;
       const on = Math.floor((now - f.t) / 100) % 2 === 0;
-      g.fillStyle = `rgba(230,60,50,${(on ? 0.45 : 0.2) * fade})`;
-      g.fillRect(f.cx * CELL, f.cy * CELL, f.w * CELL, f.h * CELL);
-      g.strokeStyle = `rgba(255,90,80,${fade})`;
-      g.lineWidth = 2;
-      g.strokeRect(f.cx * CELL + 1, f.cy * CELL + 1, f.w * CELL - 2, f.h * CELL - 2);
-    }
+      mesh.position.set(f.cx + f.w / 2, 0.03, f.cy + f.h / 2);
+      mesh.scale.set(f.w, 1, f.h);
+      (mesh.material as THREE.MeshBasicMaterial).opacity = (on ? 0.6 : 0.25) * fade;
+    });
 
     ui.markers = ui.markers.filter((m) => now - m.t < MARKER_MS);
-    for (const m of ui.markers) {
+    this.markerPool.forEach((mesh, i) => {
+      const m = ui.markers[ui.markers.length - 1 - i];
+      mesh.visible = !!m;
+      if (!m) return;
       const p = (now - m.t) / MARKER_MS;
-      g.strokeStyle = `rgba(120,255,140,${1 - p})`;
-      g.lineWidth = 2;
-      g.beginPath();
-      g.arc(m.x, m.y, 4 + (1 - p) * 12, 0, Math.PI * 2);
-      g.stroke();
-    }
-
-    g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    if (ui.dragBox) {
-      const { x0: bx0, y0: by0, x1: bx1, y1: by1 } = ui.dragBox;
-      g.fillStyle = 'rgba(120,255,140,0.12)';
-      g.strokeStyle = 'rgba(160,255,170,0.9)';
-      g.lineWidth = 1;
-      const x = Math.min(bx0, bx1) + 0.5;
-      const y = Math.min(by0, by1) + 0.5;
-      g.fillRect(x, y, Math.abs(bx1 - bx0), Math.abs(by1 - by0));
-      g.strokeRect(x, y, Math.abs(bx1 - bx0), Math.abs(by1 - by0));
-    }
-  }
-
-  private drawOre(cx: number, cy: number, amount: number): void {
-    const g = this.ctx;
-    const count = 2 + Math.min(4, Math.floor(amount / 220));
-    for (let i = 0; i < count; i++) {
-      const x = cx * CELL + 5 + noise(cx, cy, 40 + i) * (CELL - 10);
-      const y = cy * CELL + 5 + noise(cx, cy, 50 + i) * (CELL - 10);
-      const r = 3 + noise(cx, cy, 60 + i) * 2.5;
-      g.fillStyle = '#8a5a12';
-      this.diamond(x, y + 1, r + 0.5);
-      g.fillStyle = '#e0a526';
-      this.diamond(x, y, r);
-      g.fillStyle = '#ffe08a';
-      this.diamond(x - r * 0.25, y - r * 0.3, r * 0.35);
-    }
-  }
-
-  private diamond(x: number, y: number, r: number): void {
-    const g = this.ctx;
-    g.beginPath();
-    g.moveTo(x, y - r);
-    g.lineTo(x + r, y);
-    g.lineTo(x, y + r);
-    g.lineTo(x - r, y);
-    g.closePath();
-    g.fill();
-  }
-
-  private drawDeployPreview(world: World, unit: Unit): void {
-    const g = this.ctx;
-    const f = deployFootprint(unit);
-    const ok = canDeploy(world, unit);
-    g.fillStyle = ok ? 'rgba(120,255,140,0.10)' : 'rgba(255,90,80,0.14)';
-    g.strokeStyle = ok ? 'rgba(160,255,170,0.7)' : 'rgba(255,110,100,0.8)';
-    g.lineWidth = 1;
-    g.setLineDash([6, 4]);
-    g.fillRect(f.cx * CELL, f.cy * CELL, f.w * CELL, f.h * CELL);
-    g.strokeRect(f.cx * CELL + 0.5, f.cy * CELL + 0.5, f.w * CELL - 1, f.h * CELL - 1);
-    g.setLineDash([]);
-  }
-
-  private drawBuilding(b: Building, selected: boolean): void {
-    const g = this.ctx;
-    const px = b.cx * CELL;
-    const py = b.cy * CELL;
-    const w = b.w * CELL;
-    const h = b.h * CELL;
-    const p = b.progress / b.total;
-
-    g.save();
-    g.translate(px + w / 2, py + h / 2);
-    if (p < 1) {
-      // Build-up: the structure unfolds outwards from the vehicle's position.
-      const ease = 1 - (1 - p) * (1 - p);
-      g.scale(0.38 + 0.62 * ease, 0.38 + 0.62 * ease);
-      g.globalAlpha = 0.55 + 0.45 * p;
-    }
-    const hw = w / 2 - 3;
-    const hh = h / 2 - 3;
-
-    g.fillStyle = 'rgba(0,0,0,0.3)';
-    g.fillRect(-hw + 3, -hh + 4, hw * 2, hh * 2);
-    g.fillStyle = '#2a3038';
-    g.fillRect(-hw, -hh, hw * 2, hh * 2);
-    g.fillStyle = '#3c4651';
-    g.fillRect(-hw + 4, -hh + 4, hw * 2 - 8, hh * 2 - 8);
-
-    // Workshop block in team colours.
-    g.fillStyle = TEAM_DARK;
-    g.fillRect(-hw + 9, -hh + 9, hw * 1.05, hh * 2 - 18);
-    g.fillStyle = TEAM;
-    g.fillRect(-hw + 9, -hh + 9, hw * 1.05, hh * 0.9);
-    g.fillStyle = TEAM_LIGHT;
-    g.fillRect(-hw + 9, -hh + 9, hw * 1.05, 4);
-
-    // Assembly pad with a crane arm.
-    g.fillStyle = '#20252b';
-    g.fillRect(hw * 0.22, -hh + 9, hw * 0.78 - 9, hh * 2 - 18);
-    g.strokeStyle = '#e4b53a';
-    g.lineWidth = 2;
-    g.setLineDash([5, 4]);
-    g.strokeRect(hw * 0.22 + 4, -hh + 13, hw * 0.78 - 17, hh * 2 - 26);
-    g.setLineDash([]);
-    g.fillStyle = '#c9ced6';
-    g.beginPath();
-    g.arc(-hw + 9 + hw * 0.52, hh * 0.38, 7, 0, Math.PI * 2);
-    g.fill();
-    g.strokeStyle = '#c9ced6';
-    g.lineWidth = 4;
-    g.beginPath();
-    g.moveTo(-hw + 9 + hw * 0.52, hh * 0.38);
-    g.lineTo(hw * 0.6, -hh * 0.25);
-    g.stroke();
-    g.restore();
-
-    if (p < 1) {
-      g.fillStyle = 'rgba(0,0,0,0.55)';
-      g.fillRect(px + 8, py + h - 10, w - 16, 5);
-      g.fillStyle = '#7dff8e';
-      g.fillRect(px + 8, py + h - 10, (w - 16) * p, 5);
-    }
-    if (selected) this.brackets(px + 1, py + 1, w - 2, h - 2);
-  }
-
-  private drawUnit(u: Unit, alpha: number, selected: boolean): void {
-    const g = this.ctx;
-    const x = (u.prevX + (u.x - u.prevX) * alpha) * TO_PX;
-    const y = (u.prevY + (u.y - u.prevY) * alpha) * TO_PX;
-
-    g.save();
-    g.translate(x, y);
-    g.fillStyle = 'rgba(0,0,0,0.28)';
-    g.beginPath();
-    g.ellipse(3, 5, 27, 20, 0, 0, Math.PI * 2);
-    g.fill();
-    g.rotate((u.facing * Math.PI) / 4);
-    // The Pioneer is a big vehicle, drawn larger than its single cell.
-    g.scale(1.35, 1.35);
-
-    // Tracks.
-    g.fillStyle = '#1b1e22';
-    g.fillRect(-19, -14, 38, 6);
-    g.fillRect(-19, 8, 38, 6);
-    // Hull.
-    g.fillStyle = TEAM_DARK;
-    g.fillRect(-17, -10, 34, 20);
-    g.fillStyle = TEAM;
-    g.fillRect(-17, -10, 24, 20);
-    // Folded structure on the back.
-    g.fillStyle = '#3c4651';
-    g.fillRect(-14, -7, 16, 14);
-    g.strokeStyle = '#e4b53a';
-    g.lineWidth = 2;
-    g.beginPath();
-    g.moveTo(-12, -4);
-    g.lineTo(0, 4);
-    g.moveTo(-12, 4);
-    g.lineTo(0, -4);
-    g.stroke();
-    // Cab at the front.
-    g.fillStyle = TEAM_LIGHT;
-    g.fillRect(9, -7, 6, 14);
-    g.restore();
-
-    if (selected) this.brackets(x - 29, y - 29, 58, 58);
-  }
-
-  private brackets(x: number, y: number, w: number, h: number): void {
-    const g = this.ctx;
-    const n = 8;
-    g.strokeStyle = '#ffffff';
-    g.lineWidth = 2;
-    g.beginPath();
-    g.moveTo(x, y + n);
-    g.lineTo(x, y);
-    g.lineTo(x + n, y);
-    g.moveTo(x + w - n, y);
-    g.lineTo(x + w, y);
-    g.lineTo(x + w, y + n);
-    g.moveTo(x + w, y + h - n);
-    g.lineTo(x + w, y + h);
-    g.lineTo(x + w - n, y + h);
-    g.moveTo(x + n, y + h);
-    g.lineTo(x, y + h);
-    g.lineTo(x, y + h - n);
-    g.stroke();
+      const r = 0.15 + (1 - p) * 0.4;
+      mesh.position.set(m.x, 0.04, m.z);
+      mesh.scale.set(r, 1, r);
+      (mesh.material as THREE.MeshBasicMaterial).opacity = 1 - p;
+    });
   }
 }

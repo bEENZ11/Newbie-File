@@ -48,6 +48,13 @@
         font-variant-numeric: tabular-nums;
         color: #f0c14b;
       }
+      #dragbox {
+        position: fixed;
+        display: none;
+        pointer-events: none;
+        background: rgba(120, 255, 140, 0.12);
+        border: 1px solid rgba(160, 255, 170, 0.9);
+      }
       #hint {
         left: 50%;
         bottom: 16px;
@@ -64,6 +71,7 @@
       <span class="label">Credits</span>
       <span id="credits">0</span>
     </div>
+    <div id="dragbox"></div>
     <div id="hint" class="panel"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

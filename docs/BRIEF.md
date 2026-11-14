@@ -22,7 +22,7 @@ If that loop feels right, everything else has something solid to sit on.
 | Area | Choice | Why |
 | --- | --- | --- |
 | Language | TypeScript | Catches mistakes early in a codebase that will grow large |
-| Rendering | Canvas 2D | Plenty for a 2D tile game, and simple. We can move to WebGL later if needed |
+| Rendering | Three.js (WebGL) | Real 3D with lighting and shadows, viewed from a fixed raised camera in the classic style |
 | Build tool | Vite | Fast, minimal setup |
 | Tests | Vitest | Runs the simulation without a browser |
 | Framework | None | A game loop doesn't benefit from one |
@@ -141,7 +141,9 @@ Starting credits: 5000. A full harvester load is worth 500.
 
 ## Art
 
-Phase 1 uses placeholder art drawn in code: simple shapes in the player's colour with clear labels, plus a basic build-up animation. This keeps us moving on mechanics. Everything is drawn through a sprite layer, so real art can be dropped in later without touching the game logic.
+The game is rendered in 3D. The camera is fixed, looking north and tilted down at the ground, with mouse-wheel zoom but no rotation.
+
+Phase 1 uses low-poly placeholder models built from simple shapes in code, in the player's colour, with build-up animations where each part of a structure rises out of the ground in turn. This keeps us moving on mechanics. The models live in one place, separate from the game logic, so proper models from an artist or an asset pack can be swapped in later.
 
 ## Build order
 

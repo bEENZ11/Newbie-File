@@ -1,13 +1,16 @@
-import { CELL, MAP_PX_H, MAP_PX_W } from '../render/renderer';
+import { SIN_PITCH, type Renderer } from '../render/renderer';
 import type { Sim } from '../sim/sim';
-import { MAP_H, MAP_W, SUB, type Building, type Unit } from '../sim/types';
-import type { UiState } from '../ui';
+import { MAP_H, MAP_W, SUB, type Unit } from '../sim/types';
+import { ZOOM_MAX, ZOOM_MIN, type UiState } from '../ui';
 
 const DRAG_THRESHOLD = 5;
 const EDGE = 14;
+/** Camera scroll speed in screen pixels per second. */
 const CAMERA_SPEED = 900;
-const UNIT_PICK_RADIUS = 26;
-const TO_PX = CELL / SUB;
+/** How close a click must land to a unit, in cells. */
+const UNIT_PICK_RADIUS = 0.75;
+/** Roughly the middle of a vehicle's height, used when picking on screen. */
+const UNIT_PICK_HEIGHT = 0.4;
 
 /** Turns mouse and keyboard input into selection changes and sim commands. */
 export class Input {
@@ -18,14 +21,15 @@ export class Input {
     private canvas: HTMLCanvasElement,
     private sim: Sim,
     private ui: UiState,
+    private renderer: Renderer,
   ) {
     canvas.addEventListener('mousedown', (e) => this.onDown(e));
     window.addEventListener('mousemove', (e) => this.onMove(e));
     window.addEventListener('mouseup', (e) => this.onUp(e));
     canvas.addEventListener('dblclick', (e) => this.onDoubleClick(e));
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvas.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     document.addEventListener('mouseleave', () => (ui.mouseInside = false));
-    document.addEventListener('mouseenter', () => (ui.mouseInside = true));
     window.addEventListener('blur', () => {
       this.keys.clear();
       ui.mouseInside = false;
@@ -38,33 +42,31 @@ export class Input {
   updateCamera(dt: number): void {
     const ui = this.ui;
     let dx = 0;
-    let dy = 0;
+    let dz = 0;
     if (this.keys.has('ArrowLeft')) dx -= 1;
     if (this.keys.has('ArrowRight')) dx += 1;
-    if (this.keys.has('ArrowUp')) dy -= 1;
-    if (this.keys.has('ArrowDown')) dy += 1;
+    if (this.keys.has('ArrowUp')) dz -= 1;
+    if (this.keys.has('ArrowDown')) dz += 1;
     if (ui.mouseInside && !this.dragStart) {
       if (ui.mouseX < EDGE) dx -= 1;
       if (ui.mouseX > ui.viewW - EDGE) dx += 1;
-      if (ui.mouseY < EDGE) dy -= 1;
-      if (ui.mouseY > ui.viewH - EDGE) dy += 1;
+      if (ui.mouseY < EDGE) dz -= 1;
+      if (ui.mouseY > ui.viewH - EDGE) dz += 1;
     }
-    ui.camX += Math.sign(dx) * CAMERA_SPEED * dt;
-    ui.camY += Math.sign(dy) * CAMERA_SPEED * dt;
+    const cellsPerSecond = CAMERA_SPEED / ui.zoom;
+    ui.camX += Math.sign(dx) * cellsPerSecond * dt;
+    ui.camZ += Math.sign(dz) * cellsPerSecond * dt;
     this.clampCamera();
   }
 
+  /** Keeps the view inside the map, or centres the map if it is smaller. */
   clampCamera(): void {
     const ui = this.ui;
-    // If the view is larger than the map, centre the map instead.
-    ui.camX =
-      ui.viewW >= MAP_PX_W
-        ? (MAP_PX_W - ui.viewW) / 2
-        : Math.min(MAP_PX_W - ui.viewW, Math.max(0, ui.camX));
-    ui.camY =
-      ui.viewH >= MAP_PX_H
-        ? (MAP_PX_H - ui.viewH) / 2
-        : Math.min(MAP_PX_H - ui.viewH, Math.max(0, ui.camY));
+    const halfW = ui.viewW / ui.zoom / 2;
+    // The tilt squashes the ground vertically, so more of it fits on screen.
+    const halfD = ui.viewH / ui.zoom / SIN_PITCH / 2;
+    ui.camX = halfW * 2 >= MAP_W ? MAP_W / 2 : Math.min(MAP_W - halfW, Math.max(halfW, ui.camX));
+    ui.camZ = halfD * 2 >= MAP_H ? MAP_H / 2 : Math.min(MAP_H - halfD, Math.max(halfD, ui.camZ));
   }
 
   private screenPos(e: MouseEvent): { x: number; y: number } {
@@ -72,13 +74,16 @@ export class Input {
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   }
 
-  private unitAt(wx: number, wy: number): Unit | null {
+  private unitScreenPos(u: Unit): { x: number; y: number } {
+    return this.renderer.worldToScreen(this.ui, u.x / SUB, UNIT_PICK_HEIGHT, u.y / SUB);
+  }
+
+  private unitAt(sx: number, sy: number): Unit | null {
     let best: Unit | null = null;
-    let bestD = UNIT_PICK_RADIUS * UNIT_PICK_RADIUS;
+    let bestD = (UNIT_PICK_RADIUS * this.ui.zoom) ** 2;
     for (const u of this.sim.world.units) {
-      const dx = u.x * TO_PX - wx;
-      const dy = u.y * TO_PX - wy;
-      const d = dx * dx + dy * dy;
+      const p = this.unitScreenPos(u);
+      const d = (p.x - sx) ** 2 + (p.y - sy) ** 2;
       if (d <= bestD) {
         best = u;
         bestD = d;
@@ -87,22 +92,12 @@ export class Input {
     return best;
   }
 
-  private buildingAt(wx: number, wy: number): Building | null {
-    const cx = Math.floor(wx / CELL);
-    const cy = Math.floor(wy / CELL);
-    return (
-      this.sim.world.buildings.find(
-        (b) => cx >= b.cx && cy >= b.cy && cx < b.cx + b.w && cy < b.cy + b.h,
-      ) ?? null
-    );
-  }
-
   private onDown(e: MouseEvent): void {
     const p = this.screenPos(e);
     if (e.button === 0) {
       this.dragStart = p;
     } else if (e.button === 2) {
-      this.rightClick(p.x + this.ui.camX, p.y + this.ui.camY);
+      this.rightClick(p.x, p.y);
     }
   }
 
@@ -132,48 +127,54 @@ export class Input {
     }
 
     if (box) {
-      const x0 = Math.min(box.x0, box.x1) + ui.camX;
-      const x1 = Math.max(box.x0, box.x1) + ui.camX;
-      const y0 = Math.min(box.y0, box.y1) + ui.camY;
-      const y1 = Math.max(box.y0, box.y1) + ui.camY;
+      const x0 = Math.min(box.x0, box.x1);
+      const x1 = Math.max(box.x0, box.x1);
+      const y0 = Math.min(box.y0, box.y1);
+      const y1 = Math.max(box.y0, box.y1);
       for (const u of this.sim.world.units) {
-        const ux = u.x * TO_PX;
-        const uy = u.y * TO_PX;
-        if (ux >= x0 && ux <= x1 && uy >= y0 && uy <= y1) ui.selectedUnits.add(u.id);
+        const s = this.unitScreenPos(u);
+        if (s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1) ui.selectedUnits.add(u.id);
       }
       if (ui.selectedUnits.size > 0) ui.selectedBuilding = null;
       return;
     }
 
-    const wx = p.x + ui.camX;
-    const wy = p.y + ui.camY;
-    const unit = this.unitAt(wx, wy);
+    const unit = this.unitAt(p.x, p.y);
     if (unit) {
       ui.selectedUnits.add(unit.id);
       ui.selectedBuilding = null;
       return;
     }
-    const building = this.buildingAt(wx, wy);
-    if (building && ui.selectedUnits.size === 0) ui.selectedBuilding = building.id;
+    if (ui.selectedUnits.size === 0) {
+      ui.selectedBuilding = this.renderer.pickBuilding(ui, p.x, p.y);
+    }
   }
 
-  private rightClick(wx: number, wy: number): void {
+  private rightClick(sx: number, sy: number): void {
     const ui = this.ui;
     if (ui.selectedUnits.size === 0) {
       ui.selectedBuilding = null;
       return;
     }
-    const cx = Math.floor(wx / CELL);
-    const cy = Math.floor(wy / CELL);
+    const hit = this.renderer.screenToGround(ui, sx, sy);
+    const cx = Math.floor(hit.x);
+    const cy = Math.floor(hit.z);
     if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) return;
     this.sim.issue({ type: 'move', unitIds: [...ui.selectedUnits], cx, cy });
-    ui.markers.push({ x: cx * CELL + CELL / 2, y: cy * CELL + CELL / 2, t: performance.now() });
+    ui.markers.push({ x: cx + 0.5, z: cy + 0.5, t: performance.now() });
   }
 
   private onDoubleClick(e: MouseEvent): void {
     const p = this.screenPos(e);
-    const unit = this.unitAt(p.x + this.ui.camX, p.y + this.ui.camY);
+    const unit = this.unitAt(p.x, p.y);
     if (unit?.type === 'pioneer') this.sim.issue({ type: 'deploy', unitId: unit.id });
+  }
+
+  private onWheel(e: WheelEvent): void {
+    e.preventDefault();
+    const ui = this.ui;
+    ui.zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, ui.zoom * Math.exp(-e.deltaY * 0.0012)));
+    this.clampCamera();
   }
 
   private onKey(e: KeyboardEvent): void {
