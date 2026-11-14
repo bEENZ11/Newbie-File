@@ -13,11 +13,11 @@ describe('determinism', () => {
     const play = (seed: number): number => {
       const sim = new Sim(seed);
       const id = sim.world.units[0].id;
-      sim.issue({ type: 'move', unitIds: [id], cx: 30, cy: 22 });
+      sim.issue({ type: 'move', player: 0, unitIds: [id], cx: 30, cy: 22 });
       run(sim, 90);
-      sim.issue({ type: 'move', unitIds: [id], cx: 20, cy: 40 });
+      sim.issue({ type: 'move', player: 0, unitIds: [id], cx: 20, cy: 40 });
       run(sim, 400);
-      sim.issue({ type: 'deploy', unitId: id });
+      sim.issue({ type: 'deploy', player: 0, unitId: id });
       run(sim, 100);
       return sim.hash();
     };
@@ -29,9 +29,9 @@ describe('determinism', () => {
     const sim = new Sim(42);
     const id = sim.world.units[0].id;
     run(sim, 13);
-    sim.issue({ type: 'move', unitIds: [id], cx: 25, cy: 18 });
+    sim.issue({ type: 'move', player: 0, unitIds: [id], cx: 25, cy: 18 });
     run(sim, 57);
-    sim.issue({ type: 'deploy', unitId: id });
+    sim.issue({ type: 'deploy', player: 0, unitId: id });
     run(sim, 200);
     const copy = Sim.replay(42, sim.log, sim.world.tick);
     expect(copy.hash()).toBe(sim.hash());
@@ -40,7 +40,7 @@ describe('determinism', () => {
   it('keeps every position a whole number', () => {
     const sim = new Sim(3);
     const unit = sim.world.units[0];
-    sim.issue({ type: 'move', unitIds: [unit.id], cx: 33, cy: 27 });
+    sim.issue({ type: 'move', player: 0, unitIds: [unit.id], cx: 33, cy: 27 });
     for (let i = 0; i < 300; i++) {
       sim.step();
       expect(Number.isInteger(unit.x) && Number.isInteger(unit.y)).toBe(true);
@@ -52,7 +52,7 @@ describe('movement', () => {
   it('drives the Pioneer to the centre of the target cell and stops', () => {
     const sim = new Sim(1);
     const unit = sim.world.units[0];
-    sim.issue({ type: 'move', unitIds: [unit.id], cx: 24, cy: 16 });
+    sim.issue({ type: 'move', player: 0, unitIds: [unit.id], cx: 24, cy: 16 });
     run(sim, 400);
     expect(unit.x).toBe(cellCentre(24));
     expect(unit.y).toBe(cellCentre(16));
@@ -63,7 +63,7 @@ describe('movement', () => {
     const sim = new Sim(1);
     const unit = sim.world.units[0];
     addBuilding(sim.world, 'conyard', 0, START_CX + 4, START_CY - 1);
-    sim.issue({ type: 'move', unitIds: [unit.id], cx: START_CX + 10, cy: START_CY });
+    sim.issue({ type: 'move', player: 0, unitIds: [unit.id], cx: START_CX + 10, cy: START_CY });
     for (let i = 0; i < 400; i++) {
       sim.step();
       expect(sim.world.blocked[cellIndex(toCell(unit.x), toCell(unit.y))]).toBe(0);
@@ -75,7 +75,7 @@ describe('movement', () => {
     const sim = new Sim(1);
     const unit = sim.world.units[0];
     addBuilding(sim.world, 'conyard', 0, 30, 30);
-    sim.issue({ type: 'move', unitIds: [unit.id], cx: 31, cy: 31 });
+    sim.issue({ type: 'move', player: 0, unitIds: [unit.id], cx: 31, cy: 31 });
     run(sim, 600);
     expect(unit.path).toHaveLength(0);
     const dx = Math.abs(toCell(unit.x) - 31);
@@ -103,7 +103,7 @@ describe('deploying', () => {
   it('turns the Pioneer into a Construction Yard centred on it', () => {
     const sim = new Sim(1);
     const unit = sim.world.units[0];
-    sim.issue({ type: 'deploy', unitId: unit.id });
+    sim.issue({ type: 'deploy', player: 0, unitId: unit.id });
     sim.step();
     expect(sim.world.units).toHaveLength(0);
     expect(sim.events).toContainEqual({ type: 'deployed', unitId: unit.id, buildingId: 2 });
@@ -117,9 +117,9 @@ describe('deploying', () => {
   it('refuses when the footprint would leave the map', () => {
     const sim = new Sim(1);
     const unit = sim.world.units[0];
-    sim.issue({ type: 'move', unitIds: [unit.id], cx: 0, cy: 0 });
+    sim.issue({ type: 'move', player: 0, unitIds: [unit.id], cx: 0, cy: 0 });
     run(sim, 400);
-    sim.issue({ type: 'deploy', unitId: unit.id });
+    sim.issue({ type: 'deploy', player: 0, unitId: unit.id });
     sim.step();
     expect(sim.world.units).toHaveLength(1);
     expect(sim.world.buildings).toHaveLength(0);
@@ -130,7 +130,7 @@ describe('deploying', () => {
     const sim = new Sim(1);
     const unit = sim.world.units[0];
     sim.world.ore[cellIndex(START_CX + 1, START_CY)] = 500;
-    sim.issue({ type: 'deploy', unitId: unit.id });
+    sim.issue({ type: 'deploy', player: 0, unitId: unit.id });
     sim.step();
     expect(sim.world.buildings).toHaveLength(0);
   });
@@ -138,9 +138,9 @@ describe('deploying', () => {
   it('finishes the current step before deploying while on the move', () => {
     const sim = new Sim(1);
     const unit = sim.world.units[0];
-    sim.issue({ type: 'move', unitIds: [unit.id], cx: START_CX + 8, cy: START_CY });
+    sim.issue({ type: 'move', player: 0, unitIds: [unit.id], cx: START_CX + 8, cy: START_CY });
     run(sim, 3);
-    sim.issue({ type: 'deploy', unitId: unit.id });
+    sim.issue({ type: 'deploy', player: 0, unitId: unit.id });
     run(sim, 20);
     expect(sim.world.units).toHaveLength(0);
     expect(sim.world.buildings[0].cx).toBe(START_CX);
@@ -149,10 +149,10 @@ describe('deploying', () => {
   it('is cancelled by a fresh move order', () => {
     const sim = new Sim(1);
     const unit = sim.world.units[0];
-    sim.issue({ type: 'move', unitIds: [unit.id], cx: START_CX + 8, cy: START_CY });
+    sim.issue({ type: 'move', player: 0, unitIds: [unit.id], cx: START_CX + 8, cy: START_CY });
     run(sim, 3);
-    sim.issue({ type: 'deploy', unitId: unit.id });
-    sim.issue({ type: 'move', unitIds: [unit.id], cx: START_CX + 8, cy: START_CY });
+    sim.issue({ type: 'deploy', player: 0, unitId: unit.id });
+    sim.issue({ type: 'move', player: 0, unitIds: [unit.id], cx: START_CX + 8, cy: START_CY });
     run(sim, 200);
     expect(sim.world.units).toHaveLength(1);
     expect(toCell(unit.x)).toBe(START_CX + 8);

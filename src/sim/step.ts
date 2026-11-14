@@ -1,4 +1,13 @@
 import { findPath } from './pathfinding';
+import {
+  cancelProduction,
+  holdProduction,
+  placeProduction,
+  sellBuilding,
+  startProduction,
+  tickBuildings,
+  tickProduction,
+} from './production';
 import { addBuilding } from './world';
 import {
   BUILDING_DEFS,
@@ -24,7 +33,7 @@ const FACING = [
 
 /** Advances the world by exactly one tick. */
 export function stepWorld(world: World, commands: readonly Command[], events: SimEvent[]): void {
-  for (const cmd of commands) applyCommand(world, cmd);
+  for (const cmd of commands) applyCommand(world, cmd, events);
 
   for (const unit of world.units) {
     unit.prevX = unit.x;
@@ -37,31 +46,58 @@ export function stepWorld(world: World, commands: readonly Command[], events: Si
     if (unit.pendingDeploy && unit.path.length === 0) tryDeploy(world, unit, events);
   }
 
-  for (const b of world.buildings) {
-    if (b.progress < b.total) b.progress++;
-  }
+  tickProduction(world, events);
+  tickBuildings(world, events);
 
   world.tick++;
 }
 
-function applyCommand(world: World, cmd: Command): void {
+function applyCommand(world: World, cmd: Command, events: SimEvent[]): void {
+  // Commands arrive from other machines in multiplayer, so each one is
+  // checked against the player who sent it.
+  if (!world.players[cmd.player]) return;
   switch (cmd.type) {
     case 'move':
       for (const id of cmd.unitIds) {
         const unit = world.units.find((u) => u.id === id);
-        if (!unit) continue;
+        if (!unit || unit.owner !== cmd.player) continue;
         unit.pendingDeploy = false;
         setDestination(world, unit, cmd.cx, cmd.cy);
       }
       break;
     case 'deploy': {
       const unit = world.units.find((u) => u.id === cmd.unitId);
-      if (!unit || unit.type !== 'pioneer') break;
+      if (!unit || unit.owner !== cmd.player || unit.type !== 'pioneer') break;
       // Finish the step in progress so it settles on a cell centre first.
       unit.path.length = Math.min(unit.path.length, 1);
       unit.pendingDeploy = true;
       break;
     }
+    case 'build':
+      startProduction(world, cmd.player, cmd.building);
+      break;
+    case 'hold':
+      holdProduction(world, cmd.player);
+      break;
+    case 'cancel':
+      cancelProduction(world, cmd.player);
+      break;
+    case 'place':
+      if (placeProduction(world, cmd.player, cmd.cx, cmd.cy, events)) rerouteUnits(world);
+      break;
+    case 'sell':
+      sellBuilding(world, cmd.player, cmd.buildingId);
+      break;
+  }
+}
+
+/** Sends units round a building that has just appeared across their route. */
+function rerouteUnits(world: World): void {
+  for (const unit of world.units) {
+    if (!unit.path.some((c) => world.blocked[c])) continue;
+    const dest = unit.path[unit.path.length - 1];
+    const dx = dest % MAP_W;
+    setDestination(world, unit, dx, (dest - dx) / MAP_W);
   }
 }
 

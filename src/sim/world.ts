@@ -1,6 +1,7 @@
 import { randInt } from './rng';
 import {
   BUILDING_DEFS,
+  BUILDING_TYPES,
   MAP_H,
   MAP_W,
   STARTING_CREDITS,
@@ -21,8 +22,8 @@ export function createWorld(seed: number): World {
   const world: World = {
     tick: 0,
     rng: seed | 0,
-    credits: STARTING_CREDITS,
     nextId: 1,
+    players: [{ credits: STARTING_CREDITS, production: null, speedAcc: 0 }],
     units: [],
     buildings: [],
     ore: new Int32Array(MAP_W * MAP_H),
@@ -92,13 +93,27 @@ export function addBuilding(
     h: def.h,
     progress: 0,
     total: def.buildTicks,
+    selling: false,
   };
   world.buildings.push(building);
-  for (let y = cy; y < cy + def.h; y++) {
-    for (let x = cx; x < cx + def.w; x++) world.blocked[cellIndex(x, y)] = 1;
-  }
+  setBlocked(world, building, 1);
   return building;
 }
+
+export function removeBuilding(world: World, building: Building): void {
+  const i = world.buildings.indexOf(building);
+  if (i === -1) return;
+  world.buildings.splice(i, 1);
+  setBlocked(world, building, 0);
+}
+
+function setBlocked(world: World, b: Building, value: number): void {
+  for (let y = b.cy; y < b.cy + b.h; y++) {
+    for (let x = b.cx; x < b.cx + b.w; x++) world.blocked[cellIndex(x, y)] = value;
+  }
+}
+
+const PRODUCTION_STATES = ['active', 'held', 'ready'];
 
 /** FNV-1a over the whole game state. Two games in sync share the same hash. */
 export function hashWorld(world: World): number {
@@ -111,8 +126,19 @@ export function hashWorld(world: World): number {
   };
   mix(world.tick);
   mix(world.rng);
-  mix(world.credits);
   mix(world.nextId);
+  for (const p of world.players) {
+    mix(p.credits);
+    mix(p.speedAcc);
+    const prod = p.production;
+    mix(prod ? 1 : 0);
+    if (prod) {
+      mix(BUILDING_TYPES.indexOf(prod.type));
+      mix(prod.progress);
+      mix(prod.paid);
+      mix(PRODUCTION_STATES.indexOf(prod.state));
+    }
+  }
   for (const u of world.units) {
     mix(u.id);
     mix(u.owner);
@@ -125,10 +151,12 @@ export function hashWorld(world: World): number {
   }
   for (const b of world.buildings) {
     mix(b.id);
+    mix(BUILDING_TYPES.indexOf(b.type));
     mix(b.owner);
     mix(b.cx);
     mix(b.cy);
     mix(b.progress);
+    mix(b.selling ? 1 : 0);
   }
   for (let i = 0; i < world.ore.length; i++) mix(world.ore[i]);
   return h >>> 0;

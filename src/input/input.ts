@@ -1,7 +1,8 @@
 import { SIN_PITCH, type Renderer } from '../render/renderer';
 import type { Sim } from '../sim/sim';
-import { MAP_H, MAP_W, SUB, type Unit } from '../sim/types';
-import { ZOOM_MAX, ZOOM_MIN, type UiState } from '../ui';
+import { checkPlacement } from '../sim/production';
+import { BUILDING_DEFS, MAP_H, MAP_W, SUB, type Unit } from '../sim/types';
+import { LOCAL_PLAYER, ZOOM_MAX, ZOOM_MIN, placementOrigin, type UiState } from '../ui';
 
 const DRAG_THRESHOLD = 5;
 const EDGE = 14;
@@ -94,10 +95,19 @@ export class Input {
 
   private onDown(e: MouseEvent): void {
     const p = this.screenPos(e);
-    if (e.button === 0) {
-      this.dragStart = p;
-    } else if (e.button === 2) {
-      this.rightClick(p.x, p.y);
+    const ui = this.ui;
+    if (e.button === 2) {
+      // Right-click backs out of placing or selling before anything else.
+      if (ui.placing || ui.sellMode) {
+        ui.placing = null;
+        ui.sellMode = false;
+      } else {
+        this.rightClick(p.x, p.y);
+      }
+    } else if (e.button === 0) {
+      if (ui.placing) this.placeAt(p.x, p.y);
+      else if (ui.sellMode) this.sellAt(p.x, p.y);
+      else this.dragStart = p;
     }
   }
 
@@ -106,7 +116,8 @@ export class Input {
     const ui = this.ui;
     ui.mouseX = p.x;
     ui.mouseY = p.y;
-    ui.mouseInside = true;
+    // Over the sidebar counts as outside, so it neither scrolls nor previews.
+    ui.mouseInside = e.target === this.canvas || this.dragStart !== null;
     if (!this.dragStart) return;
     const moved = Math.abs(p.x - this.dragStart.x) + Math.abs(p.y - this.dragStart.y);
     if (ui.dragBox || moved > DRAG_THRESHOLD) {
@@ -160,14 +171,42 @@ export class Input {
     const cx = Math.floor(hit.x);
     const cy = Math.floor(hit.z);
     if (cx < 0 || cy < 0 || cx >= MAP_W || cy >= MAP_H) return;
-    this.sim.issue({ type: 'move', unitIds: [...ui.selectedUnits], cx, cy });
+    this.sim.issue({ type: 'move', player: LOCAL_PLAYER, unitIds: [...ui.selectedUnits], cx, cy });
     ui.markers.push({ x: cx + 0.5, z: cy + 0.5, t: performance.now() });
+  }
+
+  /** Places the finished building, or flashes red if it cannot go there. */
+  private placeAt(sx: number, sy: number): void {
+    const ui = this.ui;
+    const type = ui.placing;
+    if (!type) return;
+    const hit = this.renderer.screenToGround(ui, sx, sy);
+    ui.hoverX = hit.x;
+    ui.hoverZ = hit.z;
+    const { cx, cy } = placementOrigin(ui, type);
+    if (checkPlacement(this.sim.world, LOCAL_PLAYER, type, cx, cy).ok) {
+      this.sim.issue({ type: 'place', player: LOCAL_PLAYER, cx, cy });
+    } else {
+      const def = BUILDING_DEFS[type];
+      ui.flashes.push({ cx, cy, w: def.w, h: def.h, t: performance.now() });
+    }
+  }
+
+  private sellAt(sx: number, sy: number): void {
+    const id = this.renderer.pickBuilding(this.ui, sx, sy);
+    const building = this.sim.world.buildings.find((b) => b.id === id);
+    if (!building || building.owner !== LOCAL_PLAYER) return;
+    this.sim.issue({ type: 'sell', player: LOCAL_PLAYER, buildingId: building.id });
+    if (this.ui.selectedBuilding === building.id) this.ui.selectedBuilding = null;
   }
 
   private onDoubleClick(e: MouseEvent): void {
     const p = this.screenPos(e);
     const unit = this.unitAt(p.x, p.y);
-    if (unit?.type === 'pioneer') this.sim.issue({ type: 'deploy', unitId: unit.id });
+    if (this.ui.placing || this.ui.sellMode) return;
+    if (unit?.type === 'pioneer') {
+      this.sim.issue({ type: 'deploy', player: LOCAL_PLAYER, unitId: unit.id });
+    }
   }
 
   private onWheel(e: WheelEvent): void {
@@ -184,10 +223,12 @@ export class Input {
     if (e.key === 'Escape') {
       this.ui.selectedUnits.clear();
       this.ui.selectedBuilding = null;
+      this.ui.placing = null;
+      this.ui.sellMode = false;
     } else if (e.key === 'd' || e.key === 'D') {
       for (const u of this.sim.world.units) {
         if (u.type === 'pioneer' && this.ui.selectedUnits.has(u.id)) {
-          this.sim.issue({ type: 'deploy', unitId: u.id });
+          this.sim.issue({ type: 'deploy', player: LOCAL_PLAYER, unitId: u.id });
         }
       }
     }

@@ -1,0 +1,214 @@
+// Base building: the sidebar production slot, power, placement and selling.
+
+import { addBuilding, removeBuilding } from './world';
+import {
+  BUILDING_DEFS,
+  BUILD_RANGE,
+  MIN_POWER_RATE,
+  SELL_REFUND_PERCENT,
+  cellIndex,
+  inBounds,
+  isActive,
+  toCell,
+  type Building,
+  type BuildingType,
+  type SimEvent,
+  type World,
+} from './types';
+
+export interface PowerState {
+  supply: number;
+  demand: number;
+  low: boolean;
+}
+
+export function powerOf(world: World, player: number): PowerState {
+  let supply = 0;
+  let demand = 0;
+  for (const b of world.buildings) {
+    if (b.owner !== player || !isActive(b)) continue;
+    const p = BUILDING_DEFS[b.type].power;
+    if (p > 0) supply += p;
+    else demand -= p;
+  }
+  return { supply, demand, low: demand > supply };
+}
+
+function owns(world: World, player: number, type: BuildingType): boolean {
+  return world.buildings.some((b) => b.owner === player && b.type === type && isActive(b));
+}
+
+/** Whether the player has the Construction Yard and prerequisites for a building. */
+export function canProduce(world: World, player: number, type: BuildingType): boolean {
+  const def = BUILDING_DEFS[type];
+  if (def.produceTicks <= 0) return false;
+  if (!owns(world, player, 'conyard')) return false;
+  return def.requires.every((r) => owns(world, player, r));
+}
+
+/** What the player still needs before a building unlocks. */
+export function missingFor(world: World, player: number, type: BuildingType): BuildingType[] {
+  const needs: BuildingType[] = ['conyard', ...BUILDING_DEFS[type].requires];
+  return needs.filter((r) => !owns(world, player, r));
+}
+
+export function startProduction(world: World, player: number, type: BuildingType): void {
+  const p = world.players[player];
+  if (!p) return;
+  if (p.production) {
+    // Clicking the item that is on hold resumes it.
+    if (p.production.type === type && p.production.state === 'held') p.production.state = 'active';
+    return;
+  }
+  if (!canProduce(world, player, type)) return;
+  p.production = {
+    type,
+    progress: 0,
+    total: BUILDING_DEFS[type].produceTicks,
+    paid: 0,
+    state: 'active',
+  };
+  p.speedAcc = 0;
+}
+
+export function holdProduction(world: World, player: number): void {
+  const prod = world.players[player]?.production;
+  if (prod && prod.state === 'active') prod.state = 'held';
+}
+
+/** Abandons the current item and returns everything spent on it. */
+export function cancelProduction(world: World, player: number): void {
+  const p = world.players[player];
+  if (!p?.production) return;
+  p.credits += p.production.paid;
+  p.production = null;
+}
+
+export function tickProduction(world: World, events: SimEvent[]): void {
+  world.players.forEach((p, player) => {
+    const prod = p.production;
+    if (!prod || prod.state !== 'active') return;
+
+    // Low power slows production in proportion to the shortfall.
+    const power = powerOf(world, player);
+    const rate = power.low
+      ? Math.max(MIN_POWER_RATE, Math.floor((power.supply * 256) / power.demand))
+      : 256;
+    p.speedAcc += rate;
+
+    const cost = BUILDING_DEFS[prod.type].cost;
+    while (p.speedAcc >= 256 && prod.progress < prod.total) {
+      p.speedAcc -= 256;
+      // Pay as it builds. Working from the running total keeps the final
+      // price exact, with no rounding drift.
+      const due = Math.floor((cost * (prod.progress + 1)) / prod.total) - prod.paid;
+      if (due > p.credits) {
+        // Out of money: wait here until more arrives.
+        p.speedAcc = 0;
+        break;
+      }
+      p.credits -= due;
+      prod.paid += due;
+      prod.progress++;
+    }
+
+    if (prod.progress >= prod.total) {
+      prod.state = 'ready';
+      events.push({ type: 'productionReady', player, building: prod.type });
+    }
+  });
+}
+
+export interface PlacementCheck {
+  ok: boolean;
+  /** False when every cell is clear but the spot is too far from the base. */
+  inRange: boolean;
+  cells: { x: number; y: number; ok: boolean }[];
+}
+
+/** Checks whether a building could go with its top-left corner at this cell. */
+export function checkPlacement(
+  world: World,
+  player: number,
+  type: BuildingType,
+  cx: number,
+  cy: number,
+): PlacementCheck {
+  const def = BUILDING_DEFS[type];
+
+  // Cells a unit is standing on, or is in the middle of stepping into.
+  const occupied = new Set<number>();
+  for (const u of world.units) {
+    occupied.add(cellIndex(toCell(u.x), toCell(u.y)));
+    if (u.path.length > 0) occupied.add(u.path[0]);
+  }
+
+  const cells: PlacementCheck['cells'] = [];
+  let clear = true;
+  for (let y = cy; y < cy + def.h; y++) {
+    for (let x = cx; x < cx + def.w; x++) {
+      const i = cellIndex(x, y);
+      const ok = inBounds(x, y) && !world.blocked[i] && world.ore[i] === 0 && !occupied.has(i);
+      if (!ok) clear = false;
+      cells.push({ x, y, ok });
+    }
+  }
+
+  // Must be near an existing building of the player's, leaving at most a
+  // one-cell gap. This is what keeps a base in one piece.
+  const inRange = world.buildings.some(
+    (b) =>
+      b.owner === player &&
+      !b.selling &&
+      cx < b.cx + b.w + BUILD_RANGE &&
+      cx + def.w + BUILD_RANGE > b.cx &&
+      cy < b.cy + b.h + BUILD_RANGE &&
+      cy + def.h + BUILD_RANGE > b.cy,
+  );
+
+  return { ok: clear && inRange, inRange, cells };
+}
+
+/** Puts the finished building on the map. Returns it, or null if refused. */
+export function placeProduction(
+  world: World,
+  player: number,
+  cx: number,
+  cy: number,
+  events: SimEvent[],
+): Building | null {
+  const p = world.players[player];
+  const prod = p?.production;
+  if (!p || !prod || prod.state !== 'ready') return null;
+  const def = BUILDING_DEFS[prod.type];
+  if (!checkPlacement(world, player, prod.type, cx, cy).ok) {
+    events.push({ type: 'placeRefused', player, cx, cy, w: def.w, h: def.h });
+    return null;
+  }
+  const building = addBuilding(world, prod.type, player, cx, cy);
+  p.production = null;
+  events.push({ type: 'placed', player, buildingId: building.id });
+  return building;
+}
+
+export function sellBuilding(world: World, player: number, buildingId: number): void {
+  const b = world.buildings.find((x) => x.id === buildingId);
+  if (!b || b.owner !== player || b.selling) return;
+  b.selling = true;
+}
+
+/** Advances build-up animations, and packs away buildings that are being sold. */
+export function tickBuildings(world: World, events: SimEvent[]): void {
+  for (const b of world.buildings.slice()) {
+    if (!b.selling) {
+      if (b.progress < b.total) b.progress++;
+      continue;
+    }
+    b.progress -= 2;
+    if (b.progress > 0) continue;
+    const refund = Math.floor((BUILDING_DEFS[b.type].cost * SELL_REFUND_PERCENT) / 100);
+    world.players[b.owner].credits += refund;
+    removeBuilding(world, b);
+    events.push({ type: 'sold', player: b.owner, buildingId: b.id, refund });
+  }
+}

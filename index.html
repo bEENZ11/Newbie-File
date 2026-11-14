@@ -5,48 +5,214 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>RTS Prototype</title>
     <style>
+      :root {
+        --sidebar: 236px;
+        --gold: #f0c14b;
+        --panel: #171b1f;
+        --line: rgba(255, 255, 255, 0.12);
+        --muted: #93a0aa;
+      }
       html,
       body {
         margin: 0;
         height: 100%;
         overflow: hidden;
-        background: #101214;
+        background: #0e1012;
         font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
         color: #e8ecef;
         user-select: none;
       }
       #game {
         display: block;
-        width: 100vw;
+        width: calc(100vw - var(--sidebar));
         height: 100vh;
         cursor: crosshair;
       }
-      .panel {
+      body[data-mode='placing'] #game {
+        cursor: copy;
+      }
+      body[data-mode='sell'] #game {
+        cursor: pointer;
+      }
+      #sidebar {
         position: fixed;
-        background: rgba(16, 19, 22, 0.86);
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        border-radius: 6px;
-        pointer-events: none;
-      }
-      #topbar {
-        top: 12px;
-        right: 12px;
-        padding: 8px 14px;
+        top: 0;
+        right: 0;
+        width: var(--sidebar);
+        height: 100vh;
+        box-sizing: border-box;
+        padding: 14px 12px;
+        background: var(--panel);
+        border-left: 1px solid var(--line);
         display: flex;
-        align-items: baseline;
-        gap: 10px;
+        flex-direction: column;
+        gap: 14px;
       }
-      #topbar .label {
+      .label {
         font-size: 11px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: #9aa5ae;
+        color: var(--muted);
       }
       #credits {
-        font-size: 20px;
+        font-size: 26px;
         font-weight: 650;
         font-variant-numeric: tabular-nums;
-        color: #f0c14b;
+        color: var(--gold);
+        line-height: 1.15;
+      }
+      #power-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+      }
+      #power-text {
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        color: #cfd6dc;
+      }
+      #power-bar {
+        position: relative;
+        height: 10px;
+        margin-top: 6px;
+        background: #0c0e10;
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      #power-fill {
+        height: 100%;
+        background: #4fd16a;
+        transition: width 0.3s;
+      }
+      /* A marker showing how much power the base is drawing. */
+      #power-bar::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: var(--demand, 0%);
+        width: 2px;
+        background: #fff;
+        transition: left 0.3s;
+      }
+      #power.low #power-fill {
+        background: #e8483f;
+      }
+      #power.low #power-text {
+        color: #ff8078;
+      }
+      #structures {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 6px;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+      }
+      .build {
+        position: relative;
+        height: 86px;
+        padding: 8px 6px 6px;
+        background: #232a31;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+        text-align: center;
+        overflow: hidden;
+        cursor: pointer;
+      }
+      .build:hover {
+        border-color: rgba(255, 255, 255, 0.4);
+      }
+      .build span {
+        position: relative;
+        z-index: 1;
+      }
+      .build .name {
+        font-size: 12.5px;
+        font-weight: 600;
+        line-height: 1.2;
+      }
+      .build .cost {
+        font-size: 12px;
+        color: var(--gold);
+        font-variant-numeric: tabular-nums;
+      }
+      .build .status {
+        font-size: 11px;
+        color: var(--muted);
+        min-height: 14px;
+      }
+      /* The classic clock wipe, sweeping round as the item builds. */
+      .build .clock {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        display: none;
+        background: conic-gradient(rgba(79, 160, 255, 0.34) var(--p, 0deg), rgba(0, 0, 0, 0.35) 0);
+      }
+      .build[data-state='active'] .clock,
+      .build[data-state='held'] .clock {
+        display: block;
+      }
+      .build[data-state='active'] .status {
+        color: #cfe3ff;
+      }
+      .build[data-state='held'] {
+        border-color: #c9952a;
+      }
+      .build[data-state='held'] .status {
+        color: var(--gold);
+      }
+      .build[data-state='ready'] {
+        border-color: #4fd16a;
+        background: #1f3a29;
+        animation: pulse 1s infinite alternate;
+      }
+      .build[data-state='ready'] .status {
+        color: #8df0a2;
+        font-weight: 650;
+      }
+      .build.placing {
+        animation: none;
+        background: #2b5a3a;
+      }
+      .build[data-state='locked'],
+      .build[data-state='busy'] {
+        cursor: default;
+        opacity: 0.45;
+      }
+      .build[data-state='locked']:hover,
+      .build[data-state='busy']:hover {
+        border-color: var(--line);
+      }
+      @keyframes pulse {
+        to {
+          background: #2a5238;
+        }
+      }
+      #sell {
+        margin-top: auto;
+        padding: 9px;
+        background: #232a31;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      #sell:hover {
+        border-color: rgba(255, 255, 255, 0.4);
+      }
+      #sell.on {
+        background: #5a2622;
+        border-color: #e8483f;
       }
       #dragbox {
         position: fixed;
@@ -56,23 +222,42 @@
         border: 1px solid rgba(160, 255, 170, 0.9);
       }
       #hint {
-        left: 50%;
+        position: fixed;
+        left: calc((100vw - var(--sidebar)) / 2);
         bottom: 16px;
         transform: translateX(-50%);
         padding: 8px 16px;
         font-size: 14px;
         white-space: nowrap;
+        background: rgba(16, 19, 22, 0.86);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 6px;
+        pointer-events: none;
       }
     </style>
   </head>
   <body>
     <canvas id="game"></canvas>
-    <div id="topbar" class="panel">
-      <span class="label">Credits</span>
-      <span id="credits">0</span>
-    </div>
+    <aside id="sidebar">
+      <div>
+        <div class="label">Credits</div>
+        <div id="credits">0</div>
+      </div>
+      <div id="power">
+        <div id="power-head">
+          <span class="label">Power</span>
+          <span id="power-text"></span>
+        </div>
+        <div id="power-bar"><div id="power-fill"></div></div>
+      </div>
+      <div>
+        <div class="label">Structures</div>
+        <div id="structures"></div>
+      </div>
+      <button id="sell">Sell a building</button>
+    </aside>
     <div id="dragbox"></div>
-    <div id="hint" class="panel"></div>
+    <div id="hint"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

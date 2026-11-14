@@ -16,6 +16,7 @@ Then open the address it prints. Add `?seed=123` to the address to get the same 
 - A 3D view with a fixed raised camera, lighting and shadows. Scroll with the arrow keys or the screen edges, and zoom with the mouse wheel.
 - A 64 by 64 test grid with ore patches.
 - The Pioneer: left-click to select, right-click to drive, press D or double-click to deploy it into a Construction Yard.
+- Base building from the sidebar: Power Plant, Ore Refinery, Barracks and War Factory, with prerequisites, pay-as-you-build costs, hold and cancel, placement beside your base, power and selling.
 - A deterministic simulation running at 20 ticks a second, separate from drawing and input.
 
 ## Commands

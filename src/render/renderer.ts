@@ -1,8 +1,17 @@
 import * as THREE from 'three';
+import { checkPlacement } from '../sim/production';
 import { canDeploy, deployFootprint } from '../sim/step';
-import { MAP_H, MAP_W, SUB, cellIndex, type World } from '../sim/types';
-import type { UiState } from '../ui';
-import { frameGeometry, makeConyard, makePioneer } from './models';
+import {
+  BUILDING_DEFS,
+  MAP_H,
+  MAP_W,
+  SUB,
+  cellIndex,
+  type BuildingType,
+  type World,
+} from '../sim/types';
+import { LOCAL_PLAYER, placementOrigin, type UiState } from '../ui';
+import { frameGeometry, makeBuilding, makeGhost, makePioneer } from './models';
 
 // The view is 3D with a fixed camera: looking north, tilted down at the ground.
 // One cell is one world unit, x runs east and z runs south.
@@ -59,6 +68,9 @@ export class Renderer {
   private preview: THREE.Mesh;
   private previewFrame: THREE.Mesh;
   private flashPool: THREE.Mesh[] = [];
+  /** One tile per footprint cell while placing, green or red. */
+  private ghostCells: THREE.Mesh[] = [];
+  private ghosts = new Map<BuildingType, THREE.Group>();
   private markerPool: THREE.Mesh[] = [];
   private lastDraw = 0;
 
@@ -95,6 +107,17 @@ export class Renderer {
     );
     this.preview.visible = this.previewFrame.visible = false;
     this.scene.add(this.preview, this.previewFrame);
+
+    const tile = new THREE.PlaneGeometry(0.92, 0.92).rotateX(-Math.PI / 2);
+    for (let i = 0; i < 9; i++) {
+      const cell = new THREE.Mesh(
+        tile,
+        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.45, depthWrite: false }),
+      );
+      cell.visible = false;
+      this.ghostCells.push(cell);
+      this.scene.add(cell);
+    }
 
     for (let i = 0; i < 4; i++) {
       const flash = new THREE.Mesh(
@@ -314,7 +337,7 @@ export class Renderer {
       alive.add(b.id);
       let view = this.buildingViews.get(b.id);
       if (!view) {
-        const obj = makeConyard();
+        const obj = makeBuilding(b.type);
         obj.position.set(b.cx + b.w / 2, 0, b.cy + b.h / 2);
         const stages: THREE.Object3D[] = [];
         let arm: THREE.Object3D | null = null;
@@ -348,6 +371,36 @@ export class Renderer {
     }
   }
 
+  /** The see-through building and coloured footprint that follow the mouse. */
+  private syncPlacement(world: World, ui: UiState): void {
+    for (const ghost of this.ghosts.values()) ghost.visible = false;
+    for (const cell of this.ghostCells) cell.visible = false;
+    const type = ui.placing;
+    if (!type || !ui.mouseInside) return;
+
+    const def = BUILDING_DEFS[type];
+    const { cx, cy } = placementOrigin(ui, type);
+    const check = checkPlacement(world, LOCAL_PLAYER, type, cx, cy);
+    check.cells.forEach((c, i) => {
+      const mesh = this.ghostCells[i];
+      if (!mesh) return;
+      mesh.visible = true;
+      mesh.position.set(c.x + 0.5, 0.03, c.y + 0.5);
+      // Out of range of the base turns the whole footprint red.
+      const good = c.ok && check.inRange;
+      (mesh.material as THREE.MeshBasicMaterial).color.setHex(good ? 0x58e070 : 0xf04a40);
+    });
+
+    let ghost = this.ghosts.get(type);
+    if (!ghost) {
+      ghost = makeGhost(type);
+      this.ghosts.set(type, ghost);
+      this.scene.add(ghost);
+    }
+    ghost.visible = true;
+    ghost.position.set(cx + def.w / 2, 0, cy + def.h / 2);
+  }
+
   private syncOverlays(world: World, ui: UiState, now: number): void {
     // Footprint preview for a selected, stationary Pioneer.
     const pioneer = world.units.find(
@@ -363,6 +416,8 @@ export class Renderer {
         (mesh.material as THREE.MeshBasicMaterial).color.setHex(colour);
       }
     }
+
+    this.syncPlacement(world, ui);
 
     ui.flashes = ui.flashes.filter((f) => now - f.t < FLASH_MS);
     this.flashPool.forEach((mesh, i) => {

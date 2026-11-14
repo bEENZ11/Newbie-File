@@ -77,14 +77,14 @@ The player starts with a Pioneer, a large, slow vehicle that carries the base. (
 - Clicking a building in the sidebar starts it. One building is under construction at a time.
 - Its cost is drained from credits gradually as it builds. If credits run out, progress pauses until more arrive.
 - When finished it shows as ready. The player clicks it, then picks a spot on the grid. A ghost outline shows green for valid and red for invalid.
-- A building must go on free cells and within two cells of one of the player's existing buildings.
+- A building must go on free cells, clear of ore and units, and beside one of the player's existing buildings. A gap of one cell is allowed, but no more.
 - Once placed, a short build-up animation plays before the building becomes active.
-- Right-clicking a sidebar item pauses it, and right-clicking again cancels with a full refund.
+- Right-clicking a sidebar item puts it on hold, and right-clicking again cancels it and refunds everything spent so far.
 - A building can be sold for half its cost.
 
 ### Power
 
-Total supply is compared with total demand. If demand is higher, all production runs at half speed and the power bar turns red.
+Total supply is compared with total demand. If demand is higher, the power bar turns red and production slows in proportion to the shortfall, down to a floor of a quarter speed. Being slightly short costs a little, and being badly short costs a lot.
 
 ### Economy
 
@@ -170,8 +170,17 @@ Combat, damage and repair, fog of war, real maps and terrain, a map editor, an A
 
 We read the published source of the classic games and OpenRA to understand how problems were solved, then write our own implementation. We don't copy or translate code, and we don't use any of their art, audio, maps, names or balance tables. This keeps our code free of GPL obligations and the game clearly our own.
 
+## What the classics confirmed
+
+Before building the construction stage we read the published Red Alert source and OpenRA to check our approach. Both work the way this brief describes, which is reassuring. The points we took on board:
+
+- **Paying as you build.** Both drain the cost gradually and simply wait when credits run out. OpenRA works out each payment from the running total so the final price is always exact, and we do the same.
+- **Low power.** The original slows production in proportion to the power shortfall, which is more forgiving and more interesting than a flat penalty, so we adopted it.
+- **Placement.** The original requires new buildings to sit beside existing ones while tolerating a one-cell gap. Ours matches.
+- **Multiplayer.** Both send only player commands, schedule them a few ticks ahead to absorb lag, and regularly compare a checksum of the game state to catch machines drifting apart. Our simulation already has the command log and state hash this needs, and every command now carries the player who gave it.
+
 ## Decisions still open
 
 - **Name and setting.** The game needs a working title and a theme for its factions.
 - **Vehicle name.** Pioneer is a placeholder for the deploying base vehicle.
-- **Placement rule.** The brief uses "within two cells of an existing building". We could loosen or tighten that once we can feel it.
+- **Placement rule.** The brief allows a one-cell gap between buildings. We could loosen or tighten that once we can feel it.
