@@ -22,6 +22,16 @@
         color: #e8ecef;
         user-select: none;
       }
+      /* Darkened corners draw the eye to the middle of the battlefield. */
+      #vignette {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: calc(100vw - var(--sidebar));
+        height: 100vh;
+        pointer-events: none;
+        background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 58%, rgba(0, 0, 0, 0.34) 100%);
+      }
       #game {
         display: block;
         width: calc(100vw - var(--sidebar));
@@ -51,8 +61,8 @@
         overflow-y: auto;
       }
       #minimap {
-        width: 192px;
-        height: 192px;
+        width: 184px;
+        height: 184px;
         flex: none;
         align-self: center;
         background: #000;
@@ -117,8 +127,8 @@
       }
       .list {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
         margin-top: 6px;
       }
       button {
@@ -128,40 +138,51 @@
       .build {
         position: relative;
         height: 62px;
-        padding: 7px 6px 5px;
-        background: #232a31;
+        padding: 0;
+        background: linear-gradient(#2b343d, #1a2026);
         border: 1px solid var(--line);
         border-radius: 5px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: space-between;
-        text-align: center;
         overflow: hidden;
         cursor: pointer;
       }
+      /* The portrait, drawn from the game's own model. */
+      .build::before {
+        content: '';
+        position: absolute;
+        inset: 1px 1px 12px;
+        background: var(--icon) center / contain no-repeat;
+      }
       .build:hover {
-        border-color: rgba(255, 255, 255, 0.4);
+        border-color: rgba(255, 255, 255, 0.45);
       }
       .build span {
-        position: relative;
+        position: absolute;
         z-index: 1;
+        text-shadow: 0 1px 2px #000, 0 0 3px #000;
       }
       .build .name {
-        font-size: 12.5px;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 2px 2px 3px;
+        font-size: 9.5px;
         font-weight: 600;
-        line-height: 1.2;
+        line-height: 1.15;
+        white-space: nowrap;
+        background: rgba(8, 10, 12, 0.72);
       }
       .build .cost {
-        font-size: 12px;
+        top: 3px;
+        left: 5px;
+        font-size: 11.5px;
+        font-weight: 650;
         color: var(--gold);
         font-variant-numeric: tabular-nums;
       }
       .build .count {
-        position: absolute;
-        top: 4px;
-        right: 6px;
-        font-size: 11px;
+        top: 3px;
+        right: 5px;
+        font-size: 12px;
         font-weight: 700;
         color: #fff;
       }
@@ -169,10 +190,14 @@
         border-color: rgba(79, 160, 255, 0.6);
       }
       .build .status {
+        left: 0;
+        right: 0;
+        top: 50%;
+        transform: translateY(-70%);
         white-space: nowrap;
-        font-size: 11px;
-        color: var(--muted);
-        min-height: 14px;
+        font-size: 12px;
+        font-weight: 650;
+        color: #fff;
       }
       /* The classic clock wipe, sweeping round as the item builds. */
       .build .clock {
@@ -180,7 +205,9 @@
         inset: 0;
         z-index: 0;
         display: none;
-        background: conic-gradient(rgba(79, 160, 255, 0.34) var(--p, 0deg), rgba(0, 0, 0, 0.35) 0);
+        text-shadow: none;
+        /* Dark where there is still work to do, clearing as it sweeps round. */
+        background: conic-gradient(rgba(0, 0, 0, 0) var(--p, 0deg), rgba(4, 8, 12, 0.72) 0);
       }
       .build[data-state='active'] .clock,
       .build[data-state='held'] .clock {
@@ -197,8 +224,8 @@
       }
       .build[data-state='ready'] {
         border-color: #4fd16a;
-        background: #1f3a29;
-        animation: pulse 1s infinite alternate;
+        box-shadow: inset 0 0 0 2px rgba(79, 209, 106, 0.55);
+        animation: pulse 0.8s infinite alternate;
       }
       .build[data-state='ready'] .status {
         color: #8df0a2;
@@ -206,12 +233,12 @@
       }
       .build.placing {
         animation: none;
-        background: #2b5a3a;
+        box-shadow: inset 0 0 0 3px #4fd16a;
       }
       .build[data-state='locked'],
       .build[data-state='busy'] {
         cursor: default;
-        opacity: 0.45;
+        filter: grayscale(0.9) brightness(0.55);
       }
       .build[data-state='locked']:hover,
       .build[data-state='busy']:hover {
@@ -219,7 +246,7 @@
       }
       @keyframes pulse {
         to {
-          background: #2a5238;
+          box-shadow: inset 0 0 0 2px rgba(79, 209, 106, 0.1);
         }
       }
       #tools {
@@ -310,6 +337,7 @@
   </head>
   <body>
     <canvas id="game"></canvas>
+    <div id="vignette"></div>
     <aside id="sidebar">
       <canvas id="minimap" width="192" height="192"></canvas>
       <div>

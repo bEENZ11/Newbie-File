@@ -153,7 +153,9 @@ Starting credits: 5000. A full harvester load is worth 500.
 
 The game is rendered in 3D. The camera is fixed, looking north and tilted down at the ground, with mouse-wheel zoom but no rotation.
 
-Phase 1 uses low-poly placeholder models built from simple shapes in code, in the player's colour, with build-up animations where each part of a structure rises out of the ground in turn. This keeps us moving on mechanics. The models live in one place, separate from the game logic, so proper models from an artist or an asset pack can be swapped in later.
+The ground is painted procedurally, with grass that varies between lush and dry, forest floor, bare rock and lakes with sandy shores, all blended across cell boundaries. Lighting uses a low warm sun with soft shadows and filmic tone mapping. Chimneys smoke, cooling towers steam, damaged buildings burn, explosions leave scorch marks, and tank and turret guns swing round to track their targets. The build buttons show portraits rendered from the game's own models.
+
+The game uses low-poly placeholder models built from simple shapes in code, in the player's colour, with build-up animations where each part of a structure rises out of the ground in turn. This keeps us moving on mechanics. The models live in one place, separate from the game logic, so proper models from an artist or an asset pack can be swapped in later.
 
 ## Build order
 

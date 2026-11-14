@@ -7,7 +7,6 @@ import {
   MAP_H,
   ROCK,
   TREES,
-  WATER,
   MAP_W,
   SUB,
   cellIndex,
@@ -21,6 +20,7 @@ import {
 import { LOCAL_PLAYER, placementOrigin, type UiState } from '../ui';
 import { rallyPoint } from '../sim/training';
 import { Effects } from './effects';
+import { paintGround } from './ground';
 import { HealthBars } from './healthbars';
 import { frameGeometry, makeBuilding, makeGhost, makeRallyFlag, makeUnit } from './models';
 
@@ -34,7 +34,7 @@ const CAMERA_DISTANCE = 120;
 const MARKER_MS = 450;
 const FLASH_MS = 600;
 const TURN_RATE = 9;
-const TERRAIN_TEXELS = 32;
+const TERRAIN_TEXELS = 16;
 
 /** Cheap repeatable noise so terrain and ore look the same every time. */
 function noise(x: number, y: number, salt: number): number {
@@ -42,6 +42,22 @@ function noise(x: number, y: number, salt: number): number {
   h = Math.imul(h ^ (h >>> 15), 2246822519);
   return ((h ^ (h >>> 13)) >>> 0) / 4294967296;
 }
+
+/** Where each building gives off smoke or steam: offset from its centre, puff size and colour. */
+const CHIMNEYS: Record<BuildingType, [number, number, number, number, number][]> = {
+  conyard: [[-0.95, 2.0, -0.9, 0.13, 0x555555]],
+  power: [
+    [0.45, 1.2, -0.42, 0.2, 0xe8eef2],
+    [0.45, 1.2, 0.42, 0.2, 0xe8eef2],
+  ],
+  refinery: [[-1.05, 2.65, -1.0, 0.17, 0x3a3a3a]],
+  barracks: [],
+  factory: [
+    [0.9, 1.8, -1.0, 0.12, 0x555555],
+    [0.5, 1.8, -1.0, 0.12, 0x555555],
+  ],
+  turret: [],
+};
 
 /** True if any cell under a building is set in the given vision layer. */
 function footprintSeen(layer: Uint8Array, b: Building): boolean {
@@ -65,6 +81,7 @@ interface UnitView {
   angle: number;
   cargo: THREE.Object3D | null;
   drum: THREE.Object3D | null;
+  turret: THREE.Object3D | null;
 }
 
 interface BuildingView {
@@ -79,7 +96,7 @@ export class Renderer {
   private gl: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
   private camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 400);
-  private sun = new THREE.DirectionalLight(0xfff0d6, 3.1);
+  private sun = new THREE.DirectionalLight(0xffe2b4, 3.6);
   private raycaster = new THREE.Raycaster();
   private ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private tmp = new THREE.Vector3();
@@ -108,6 +125,7 @@ export class Renderer {
   private fogData = new Uint8Array(MAP_W * MAP_H * 4);
   private fogTexture!: THREE.DataTexture;
   private fogTick = -1;
+  private lastSmoke = 0;
   private effects = new Effects(this.scene);
   private healthBars = new HealthBars(this.scene);
 
@@ -118,9 +136,13 @@ export class Renderer {
     this.gl = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.gl.shadowMap.enabled = true;
     this.gl.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Filmic tone mapping gives richer contrast and stops bright areas washing out.
+    this.gl.toneMapping = THREE.ACESFilmicToneMapping;
+    this.gl.toneMappingExposure = 1.25;
     this.scene.background = new THREE.Color(0x0e1012);
 
-    this.scene.add(new THREE.HemisphereLight(0xdfeaff, 0x3d3a2c, 0.95));
+    // Cool light from the sky, warm light bounced off the ground, and a low golden sun.
+    this.scene.add(new THREE.HemisphereLight(0xcfe2ff, 0x6a5c40, 1.25));
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
     const sc = this.sun.shadow.camera;
@@ -132,6 +154,7 @@ export class Renderer {
     sc.far = 120;
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.03;
+    this.sun.shadow.radius = 3;
     this.scene.add(this.sun, this.sun.target);
 
     this.scene.add(this.makeTerrain(world));
@@ -205,6 +228,7 @@ export class Renderer {
     const rocks: THREE.Matrix4[] = [];
     const trunks: THREE.Matrix4[] = [];
     const crowns: THREE.Matrix4[] = [];
+    const tops: THREE.Matrix4[] = [];
     const q = new THREE.Quaternion();
     const e = new THREE.Euler();
     for (let y = 0; y < MAP_H; y++) {
@@ -229,14 +253,16 @@ export class Renderer {
             const pz = y + 0.25 + noise(x, y, 180 + i) * 0.5;
             q.identity();
             trunks.push(new THREE.Matrix4().compose(new THREE.Vector3(px, 0.15, pz), q, new THREE.Vector3(0.07, 0.3, 0.07)));
-            crowns.push(new THREE.Matrix4().compose(new THREE.Vector3(px, 0.3 + h / 2, pz), q, new THREE.Vector3(0.32, h, 0.32)));
+            crowns.push(new THREE.Matrix4().compose(new THREE.Vector3(px, 0.3 + h * 0.4, pz), q, new THREE.Vector3(0.36, h * 0.8, 0.36)));
+            tops.push(new THREE.Matrix4().compose(new THREE.Vector3(px, 0.3 + h * 0.85, pz), q, new THREE.Vector3(0.24, h * 0.6, 0.24)));
           }
         }
       }
     }
     const add = (geo: THREE.BufferGeometry, colour: number, spots: THREE.Matrix4[]): void => {
       if (spots.length === 0) return;
-      const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: colour, flatShading: true }), spots.length);
+      const material = new THREE.MeshStandardMaterial({ color: colour, roughness: 0.9, flatShading: true });
+      const mesh = new THREE.InstancedMesh(geo, material, spots.length);
       spots.forEach((m, i) => mesh.setMatrixAt(i, m));
       mesh.castShadow = true;
       mesh.receiveShadow = true;
@@ -244,47 +270,17 @@ export class Renderer {
     };
     add(new THREE.DodecahedronGeometry(1), 0x7b7f86, rocks);
     add(new THREE.CylinderGeometry(1, 1, 1, 6), 0x5a4030, trunks);
-    add(new THREE.ConeGeometry(1, 1, 7), 0x2f6b34, crowns);
+    add(new THREE.ConeGeometry(1, 1, 7), 0x2c6431, crowns);
+    add(new THREE.ConeGeometry(1, 1, 7), 0x3d7d3c, tops);
   }
 
   private makeTerrain(world: World): THREE.Mesh {
-    const c = document.createElement('canvas');
-    c.width = MAP_W * TERRAIN_TEXELS;
-    c.height = MAP_H * TERRAIN_TEXELS;
-    const g = c.getContext('2d')!;
-    const t = TERRAIN_TEXELS;
-    for (let y = 0; y < MAP_H; y++) {
-      for (let x = 0; x < MAP_W; x++) {
-        const light = 31 + noise(x, y, 1) * 1.1;
-        const hue = 92 + noise(x, y, 2) * 4;
-        const ground = world.terrain[cellIndex(x, y)];
-        g.fillStyle =
-          ground === WATER
-            ? `hsl(${205 + noise(x, y, 3) * 6} 48% ${30 + noise(x, y, 4) * 3}%)`
-            : ground === ROCK
-              ? `hsl(40 9% ${30 + noise(x, y, 5) * 4}%)`
-              : ground === TREES
-                ? `hsl(${hue} 30% ${light - 6}%)`
-                : `hsl(${hue} 30% ${light}%)`;
-        g.fillRect(x * t, y * t, t, t);
-        for (let i = 0; i < 9; i++) {
-          g.fillStyle = noise(x, y, 10 + i) > 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.09)';
-          const sx = x * t + Math.floor(noise(x, y, 20 + i) * (t - 2));
-          const sy = y * t + Math.floor(noise(x, y, 30 + i) * (t - 2));
-          g.fillRect(sx, sy, 2 + (i % 2), 1 + (i % 3 === 0 ? 1 : 0));
-        }
-      }
-    }
-    g.fillStyle = 'rgba(0,0,0,0.055)';
-    for (let i = 0; i <= MAP_W; i++) g.fillRect(i * t, 0, 1, c.height);
-    for (let i = 0; i <= MAP_H; i++) g.fillRect(0, i * t, c.width, 1);
-
-    const tex = new THREE.CanvasTexture(c);
+    const tex = new THREE.CanvasTexture(paintGround(world.terrain, TERRAIN_TEXELS));
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = this.gl.capabilities.getMaxAnisotropy();
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(MAP_W, MAP_H).rotateX(-Math.PI / 2),
-      new THREE.MeshLambertMaterial({ map: tex }),
+      new THREE.MeshStandardMaterial({ map: tex, roughness: 1, metalness: 0 }),
     );
     mesh.position.set(MAP_W / 2, 0, MAP_H / 2);
     mesh.receiveShadow = true;
@@ -356,6 +352,7 @@ export class Renderer {
     this.syncBuildings(world, ui, now);
     this.syncOverlays(world, ui, now);
     this.syncHealth(world, ui, alpha);
+    this.syncSmoke(world, now);
     this.effects.update(now);
 
     this.gl.render(this.scene, this.camera);
@@ -397,9 +394,11 @@ export class Renderer {
         }
       }
     }
-    const material = new THREE.MeshLambertMaterial({
-      color: 0xf0b429,
-      emissive: 0x6b4500,
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xf2b22a,
+      emissive: 0x5a3600,
+      roughness: 0.28,
+      metalness: 0.55,
       flatShading: true,
     });
     this.oreMesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(1), material, spots.length);
@@ -421,9 +420,11 @@ export class Renderer {
         const obj = makeUnit(u.type, u.owner);
         let cargo: THREE.Object3D | null = null;
         let drum: THREE.Object3D | null = null;
+        let turret: THREE.Object3D | null = null;
         obj.traverse((o) => {
           if (o.userData.cargo) cargo = o;
           if (o.userData.drum) drum = o;
+          if (o.userData.turret) turret = o;
         });
         const ring = new THREE.Mesh(this.ringGeo, this.overlayMat);
         ring.position.y = 0.04;
@@ -431,7 +432,7 @@ export class Renderer {
         ring.renderOrder = 2;
         obj.add(ring);
         this.scene.add(obj);
-        view = { obj, ring, angle: target, cargo, drum };
+        view = { obj, ring, angle: target, cargo, drum, turret };
         this.unitViews.set(u.id, view);
       }
       // Turn smoothly towards the new heading, taking the short way round.
@@ -454,6 +455,16 @@ export class Renderer {
         view.cargo.scale.y = Math.max(0.02, u.cargo / HARVEST_CAPACITY);
       }
       if (view.drum && u.job === 'harvest') view.drum.rotation.y += dt * 9;
+      if (view.turret) {
+        // Swing the turret onto the target, or back to straight ahead.
+        let want = 0;
+        const foe = u.attack !== 0 ? this.positionOf(world, u.attack) : null;
+        if (foe) want = Math.atan2(-(foe.z - u.y / SUB), foe.x - u.x / SUB) - view.angle;
+        let swing = want - view.turret.rotation.y;
+        swing = Math.atan2(Math.sin(swing), Math.cos(swing));
+        const rate = 6 * dt;
+        view.turret.rotation.y += Math.abs(swing) <= rate ? swing : Math.sign(swing) * rate;
+      }
     }
     for (const [id, view] of this.unitViews) {
       if (alive.has(id)) continue;
@@ -496,7 +507,11 @@ export class Renderer {
         stage.scale.y = Math.max(0.001, eased);
       });
       if (view.arm && p >= 1) view.arm.rotation.y = Math.sin(now * 0.0005 + b.id) * 1.1 - 0.5;
-      if (view.head) view.head.rotation.y = (-b.aim * Math.PI) / 4;
+      if (view.head) {
+        let turn = (-b.aim * Math.PI) / 4 - view.head.rotation.y;
+        turn = Math.atan2(Math.sin(turn), Math.cos(turn));
+        view.head.rotation.y += turn * 0.2;
+      }
       // A building under repair pulses green.
       const mending = b.repairing && b.owner === LOCAL_PLAYER;
       view.frame.material = mending ? this.repairMat : this.frameMat;
@@ -509,6 +524,46 @@ export class Renderer {
       if (alive.has(id)) continue;
       this.scene.remove(view.obj);
       this.buildingViews.delete(id);
+    }
+  }
+
+  /** Where a unit or building is, in cells, for aiming turrets at it. */
+  private positionOf(world: World, id: number): { x: number; z: number } | null {
+    const u = world.units.find((x) => x.id === id);
+    if (u) return { x: u.x / SUB, z: u.y / SUB };
+    const b = world.buildings.find((x) => x.id === id);
+    return b ? { x: b.cx + b.w / 2, z: b.cy + b.h / 2 } : null;
+  }
+
+  /** Smoke from chimneys, steam from cooling towers, and fire from anything badly damaged. */
+  private syncSmoke(world: World, now: number): void {
+    if (now - this.lastSmoke < 260) return;
+    this.lastSmoke = now;
+    const vision = world.vision[LOCAL_PLAYER];
+    for (const b of world.buildings) {
+      if (b.progress < b.total || b.selling) continue;
+      if (b.owner !== LOCAL_PLAYER && !footprintSeen(vision.visible, b)) continue;
+      const x = b.cx + b.w / 2;
+      const z = b.cy + b.h / 2;
+      for (const [dx, dy, dz, size, colour] of CHIMNEYS[b.type]) {
+        if (Math.random() < 0.6) this.effects.puff(x + dx, dy, z + dz, size, colour, now);
+      }
+      const health = b.hp / BUILDING_DEFS[b.type].hp;
+      if (health < 0.5) {
+        // The worse the damage, the more of the building is alight.
+        const fires = health < 0.25 ? 2 : 1;
+        for (let i = 0; i < fires; i++) {
+          const fx = x + (Math.random() - 0.5) * b.w * 0.7;
+          const fz = z + (Math.random() - 0.5) * b.h * 0.7;
+          this.effects.flame(fx, 0.6 + Math.random() * 0.5, fz, 0.16, now);
+          this.effects.puff(fx, 1.0, fz, 0.22, 0x1c1c1c, now);
+        }
+      }
+    }
+    for (const u of world.units) {
+      if (UNIT_DEFS[u.type].armour !== 'vehicle' || u.hp * 5 >= UNIT_DEFS[u.type].hp * 2) continue;
+      if (u.owner !== LOCAL_PLAYER && !vision.visible[u.cell]) continue;
+      this.effects.puff(u.x / SUB, 0.5, u.y / SUB, 0.14, 0x2a2a2a, now);
     }
   }
 

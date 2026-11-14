@@ -28,11 +28,19 @@ const PALETTES: Palette[] = [
 /** The palette the model currently being built should use. */
 let team = PALETTES[0];
 
-const materials = new Map<number, THREE.MeshLambertMaterial>();
-function mat(colour: number): THREE.MeshLambertMaterial {
+const materials = new Map<number, THREE.MeshStandardMaterial>();
+/** One shared material per colour. Glass is shiny, rubber is dull, the rest sit in between. */
+function mat(colour: number): THREE.MeshStandardMaterial {
   let m = materials.get(colour);
   if (!m) {
-    m = new THREE.MeshLambertMaterial({ color: colour });
+    const glass = colour === GLASS;
+    m = new THREE.MeshStandardMaterial({
+      color: colour,
+      roughness: glass ? 0.15 : colour === RUBBER ? 0.95 : 0.72,
+      metalness: glass ? 0.7 : colour === STEEL || colour === STEEL_DARK || colour === STEEL_LIGHT ? 0.35 : 0.08,
+      emissive: glass ? 0x24465c : 0x000000,
+      flatShading: true,
+    });
     materials.set(colour, m);
   }
   return m;
@@ -185,17 +193,34 @@ function buildRifleman(): THREE.Group {
   return finish(g);
 }
 
+/** userData.turret marks the turret, which swings round to follow whatever the tank is shooting at. */
 function buildTank(): THREE.Group {
   const g = new THREE.Group();
-  g.add(box(1.1, 0.22, 0.22, RUBBER, 0, 0, -0.32));
-  g.add(box(1.1, 0.22, 0.22, RUBBER, 0, 0, 0.32));
-  g.add(box(1.0, 0.2, 0.5, team.dark, 0, 0.1, 0));
-  g.add(box(0.86, 0.1, 0.78, team.main, -0.02, 0.24, 0));
-  // Turret and gun.
-  g.add(box(0.44, 0.2, 0.44, team.main, -0.08, 0.34, 0));
-  g.add(box(0.46, 0.04, 0.46, team.light, -0.08, 0.54, 0));
-  g.add(box(0.62, 0.07, 0.07, STEEL_DARK, 0.42, 0.41, 0));
-  g.add(box(0.1, 0.1, 0.1, STEEL_DARK, 0.7, 0.395, 0));
+  // Tracks with guards, then the hull.
+  g.add(box(1.14, 0.22, 0.22, RUBBER, 0, 0, -0.33));
+  g.add(box(1.14, 0.22, 0.22, RUBBER, 0, 0, 0.33));
+  g.add(box(1.04, 0.04, 0.26, team.dark, 0, 0.22, -0.33));
+  g.add(box(1.04, 0.04, 0.26, team.dark, 0, 0.22, 0.33));
+  g.add(box(1.0, 0.2, 0.46, team.dark, 0, 0.08, 0));
+  g.add(box(0.9, 0.1, 0.5, team.main, -0.02, 0.26, 0));
+  g.add(box(0.22, 0.08, 0.44, team.dark, 0.42, 0.22, 0));
+  // Engine deck and exhausts at the back.
+  g.add(box(0.26, 0.05, 0.4, STEEL_DARK, -0.36, 0.36, 0));
+  g.add(box(0.06, 0.1, 0.06, STEEL_DARK, -0.5, 0.36, -0.16));
+  g.add(box(0.06, 0.1, 0.06, STEEL_DARK, -0.5, 0.36, 0.16));
+
+  const turret = new THREE.Group();
+  turret.position.set(-0.04, 0.36, 0);
+  turret.userData.turret = true;
+  turret.add(box(0.44, 0.18, 0.42, team.main, 0, 0, 0));
+  turret.add(box(0.3, 0.04, 0.3, team.light, -0.02, 0.18, 0));
+  turret.add(box(0.1, 0.07, 0.1, STEEL_DARK, -0.08, 0.22, 0.1));
+  turret.add(box(0.16, 0.12, 0.18, team.dark, 0.28, 0.03, 0));
+  turret.add(box(0.6, 0.07, 0.07, STEEL_DARK, 0.62, 0.06, 0));
+  turret.add(box(0.1, 0.1, 0.1, STEEL_DARK, 0.9, 0.045, 0));
+  turret.add(box(0.02, 0.3, 0.02, RUBBER, -0.16, 0.18, -0.16));
+  g.add(turret);
+
   g.scale.setScalar(1.1);
   return finish(g);
 }

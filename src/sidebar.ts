@@ -6,7 +6,6 @@ import { canTrain, missingForUnit } from './sim/training';
 import {
   BUILDING_DEFS,
   BUILDING_TYPES,
-  TICK_RATE,
   UNIT_DEFS,
   UNIT_TYPES,
   type BuildingType,
@@ -47,6 +46,7 @@ export class Sidebar {
     private root: HTMLElement,
     private sim: Sim,
     private ui: UiState,
+    private icons: Record<string, string> = {},
   ) {
     this.credits = root.querySelector('#credits')!;
     this.powerBox = root.querySelector('#power')!;
@@ -78,6 +78,7 @@ export class Sidebar {
 
   private addButton(
     listId: string,
+    key: string,
     name: string,
     cost: number,
     onClick: () => void,
@@ -86,6 +87,8 @@ export class Sidebar {
   ): void {
     const button = document.createElement('button');
     button.className = 'build';
+    if (this.icons[key]) button.style.setProperty('--icon', `url(${this.icons[key]})`);
+    button.title = name;
     button.innerHTML =
       `<span class="clock"></span>` +
       `<span class="count"></span>` +
@@ -133,7 +136,7 @@ export class Sidebar {
       }
     };
 
-    this.addButton('#structures', def.name, def.cost, onClick, onRightClick, () => {
+    this.addButton('#structures', type, def.name, def.cost, onClick, onRightClick, () => {
       const prod = production();
       const mine = prod?.type === type ? prod : null;
       const placing = ui.placing === type;
@@ -156,7 +159,7 @@ export class Sidebar {
         return { state: 'locked', label, progress: 0, count: 0, placing };
       }
       if (prod) return { state: 'busy', label: '', progress: 0, count: 0, placing };
-      return { state: 'idle', label: seconds(def.produceTicks), progress: 0, count: 0, placing };
+      return { state: 'idle', label: '', progress: 0, count: 0, placing };
     });
   }
 
@@ -170,7 +173,7 @@ export class Sidebar {
     const onClick = (): void => sim.issue({ type: 'train', player: LOCAL_PLAYER, unit: type });
     const onRightClick = (): void => sim.issue({ type: 'untrain', player: LOCAL_PLAYER, unit: type });
 
-    this.addButton(`#${kind}`, def.name, def.cost, onClick, onRightClick, () => {
+    this.addButton(`#${kind}`, type, def.name, def.cost, onClick, onRightClick, () => {
       const q = queue();
       const count = q.items.filter((t) => t === type).length;
       const head = q.items[0] === type;
@@ -187,7 +190,7 @@ export class Sidebar {
         const label = missing.length ? `Needs ${SHORT[missing[0]]}` : '';
         return { state: 'locked', label, progress: 0, count: 0, placing: false };
       }
-      return { state: 'idle', label: seconds(def.produceTicks), progress: 0, count: 0, placing: false };
+      return { state: 'idle', label: '', progress: 0, count: 0, placing: false };
     });
   }
 
@@ -226,10 +229,6 @@ export class Sidebar {
     this.sellButton.classList.toggle('on', this.ui.sellMode);
     this.repairButton.classList.toggle('on', this.ui.repairMode);
   }
-}
-
-function seconds(ticks: number): string {
-  return `${Math.round(ticks / TICK_RATE)}s`;
 }
 
 function setText(el: HTMLElement, text: string): void {

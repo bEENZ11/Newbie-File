@@ -1,6 +1,7 @@
 import { Sounds } from './audio';
 import { Input } from './input/input';
 import { Minimap } from './minimap';
+import { renderIcons } from './render/icons';
 import { Renderer } from './render/renderer';
 import { Sidebar } from './sidebar';
 import { checkPlacement, powerOf } from './sim/production';
@@ -60,7 +61,7 @@ function loudness(x: number, z: number): number {
 const ui = createUi();
 const renderer = new Renderer(canvas, sim.world);
 const input = new Input(canvas, sim, ui, renderer);
-const sidebar = new Sidebar(document.getElementById('sidebar')!, sim, ui);
+const sidebar = new Sidebar(document.getElementById('sidebar')!, sim, ui, renderIcons());
 const minimap = new Minimap(document.getElementById('minimap') as HTMLCanvasElement, sim, ui, () =>
   input.clampCamera(),
 );
