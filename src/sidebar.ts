@@ -21,6 +21,7 @@ const SHORT: Record<BuildingType, string> = {
   refinery: 'Refinery',
   barracks: 'Barracks',
   factory: 'Factory',
+  turret: 'Turret',
 };
 
 interface Entry {
@@ -37,6 +38,7 @@ export class Sidebar {
   private powerText: HTMLElement;
   private powerBox: HTMLElement;
   private sellButton: HTMLButtonElement;
+  private repairButton: HTMLButtonElement;
   private entries: Entry[] = [];
   /** Credits shown on screen, which roll towards the real figure. */
   private shownCredits = -1;
@@ -51,6 +53,7 @@ export class Sidebar {
     this.powerFill = root.querySelector('#power-fill')!;
     this.powerText = root.querySelector('#power-text')!;
     this.sellButton = root.querySelector('#sell')!;
+    this.repairButton = root.querySelector('#repair')!;
 
     for (const type of BUILDING_TYPES) {
       if (BUILDING_DEFS[type].produceTicks > 0) this.addStructure(type);
@@ -61,6 +64,12 @@ export class Sidebar {
 
     this.sellButton.addEventListener('click', () => {
       ui.sellMode = !ui.sellMode;
+      ui.repairMode = false;
+      ui.placing = null;
+    });
+    this.repairButton.addEventListener('click', () => {
+      ui.repairMode = !ui.repairMode;
+      ui.sellMode = false;
       ui.placing = null;
     });
     // Clicks on the sidebar should never fall through to the map.
@@ -105,6 +114,7 @@ export class Sidebar {
     const onClick = (): void => {
       const prod = production();
       ui.sellMode = false;
+      ui.repairMode = false;
       if (!prod || (prod.type === type && prod.state === 'held')) {
         sim.issue({ type: 'build', player: LOCAL_PLAYER, building: type });
       } else if (prod.type === type && prod.state === 'ready') {
@@ -214,6 +224,7 @@ export class Sidebar {
     }
 
     this.sellButton.classList.toggle('on', this.ui.sellMode);
+    this.repairButton.classList.toggle('on', this.ui.repairMode);
   }
 }
 

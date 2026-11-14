@@ -105,15 +105,17 @@ export class Input {
     const ui = this.ui;
     if (e.button === 2) {
       // Right-click backs out of placing or selling before anything else.
-      if (ui.placing || ui.sellMode) {
+      if (ui.placing || ui.sellMode || ui.repairMode) {
         ui.placing = null;
         ui.sellMode = false;
+        ui.repairMode = false;
       } else {
         this.rightClick(p.x, p.y);
       }
     } else if (e.button === 0) {
       if (ui.placing) this.placeAt(p.x, p.y);
       else if (ui.sellMode) this.sellAt(p.x, p.y);
+      else if (ui.repairMode) this.repairAt(p.x, p.y);
       else this.dragStart = p;
     }
   }
@@ -249,10 +251,17 @@ export class Input {
     if (this.ui.selectedBuilding === building.id) this.ui.selectedBuilding = null;
   }
 
+  private repairAt(sx: number, sy: number): void {
+    const id = this.renderer.pickBuilding(this.ui, sx, sy);
+    const building = this.sim.world.buildings.find((b) => b.id === id);
+    if (!building || building.owner !== LOCAL_PLAYER) return;
+    this.sim.issue({ type: 'repair', player: LOCAL_PLAYER, buildingId: building.id });
+  }
+
   private onDoubleClick(e: MouseEvent): void {
     const p = this.screenPos(e);
     const unit = this.unitAt(p.x, p.y);
-    if (this.ui.placing || this.ui.sellMode) return;
+    if (this.ui.placing || this.ui.sellMode || this.ui.repairMode) return;
     if (unit?.type === 'pioneer' && unit.owner === LOCAL_PLAYER) {
       this.sim.issue({ type: 'deploy', player: LOCAL_PLAYER, unitId: unit.id });
     }
@@ -274,6 +283,7 @@ export class Input {
       this.ui.selectedBuilding = null;
       this.ui.placing = null;
       this.ui.sellMode = false;
+      this.ui.repairMode = false;
     } else if (e.key === 'd' || e.key === 'D') {
       for (const u of this.sim.world.units) {
         if (u.type === 'pioneer' && this.ui.selectedUnits.has(u.id)) {
@@ -304,6 +314,7 @@ export class Input {
     ui.selectedBuilding = null;
     ui.placing = null;
     ui.sellMode = false;
+    ui.repairMode = false;
     const now = performance.now();
     if (this.lastGroup === n && now - this.lastGroupAt < 400) {
       ui.camX = members.reduce((a, u) => a + u.x, 0) / members.length / SUB;

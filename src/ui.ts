@@ -22,6 +22,8 @@ export interface UiState {
   placing: BuildingType | null;
   /** True while the next click on a building sells it. */
   sellMode: boolean;
+  /** True while the next click on a building starts or stops its repair. */
+  repairMode: boolean;
   /** The ground point under the mouse, in cells. */
   hoverX: number;
   hoverZ: number;
@@ -49,6 +51,7 @@ export function createUi(): UiState {
     selectedBuilding: null,
     placing: null,
     sellMode: false,
+    repairMode: false,
     hoverX: 0,
     hoverZ: 0,
     dragBox: null,

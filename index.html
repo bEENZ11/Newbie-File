@@ -31,7 +31,8 @@
       body[data-mode='placing'] #game {
         cursor: copy;
       }
-      body[data-mode='sell'] #game {
+      body[data-mode='sell'] #game,
+      body[data-mode='repair'] #game {
         cursor: pointer;
       }
       #sidebar {
@@ -221,8 +222,14 @@
           background: #2a5238;
         }
       }
-      #sell {
+      #tools {
         margin-top: auto;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      #sell,
+      #repair {
         padding: 9px;
         background: #232a31;
         border: 1px solid var(--line);
@@ -231,8 +238,13 @@
         font-weight: 600;
         cursor: pointer;
       }
-      #sell:hover {
+      #sell:hover,
+      #repair:hover {
         border-color: rgba(255, 255, 255, 0.4);
+      }
+      #repair.on {
+        background: #1f4a2c;
+        border-color: #4fd16a;
       }
       #sell.on {
         background: #5a2622;
@@ -266,6 +278,20 @@
       }
       #banner[data-result='lost'] {
         color: #ff6b61;
+      }
+      #again {
+        position: fixed;
+        display: none;
+        left: calc((100vw - var(--sidebar)) / 2);
+        top: calc(34% + 78px);
+        transform: translateX(-50%);
+        padding: 10px 26px;
+        font-size: 15px;
+        font-weight: 600;
+        background: #232a31;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        border-radius: 6px;
+        cursor: pointer;
       }
       #hint {
         position: fixed;
@@ -309,10 +335,14 @@
         <div class="label">Vehicles</div>
         <div id="vehicle" class="list"></div>
       </div>
-      <button id="sell">Sell a building</button>
+      <div id="tools">
+        <button id="repair">Repair</button>
+        <button id="sell">Sell</button>
+      </div>
     </aside>
     <div id="dragbox"></div>
     <div id="banner"></div>
+    <button id="again">Play again</button>
     <div id="hint"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

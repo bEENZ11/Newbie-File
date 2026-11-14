@@ -129,7 +129,9 @@ Total supply is compared with total demand. If demand is higher, the power bar t
 | Zoom | Mouse wheel |
 | Deploy the Pioneer | D, or double-click it |
 | Set a rally point | Select a production building, right-click the ground |
-| Scroll the camera | Arrow keys or screen edge |
+| Scroll the camera | Arrow keys, screen edge, or click the radar |
+| Repair or sell a building | The Repair or Sell button, then click the building |
+| Mute sound | M |
 
 ### Starting numbers
 
@@ -178,18 +180,49 @@ Combat, damage and repair, fog of war, real maps and terrain, a map editor, an A
 
 We read the published source of the classic games and OpenRA to understand how problems were solved, then write our own implementation. We don't copy or translate code, and we don't use any of their art, audio, maps, names or balance tables. This keeps our code free of GPL obligations and the game clearly our own.
 
-## Phase 2 progress: combat
+## Phase 2 and beyond: where the game stands
 
-Combat is the first part of phase 2 to be built.
+Everything below is built and playable. A game is now a skirmish against the computer on a generated map.
+
+### Combat
 
 - **Health.** Every unit and building has health, shown as a bar when it is selected or damaged. At zero it is destroyed and its ground is freed.
 - **Weapons.** Riflemen and Light Tanks are armed. Rifles are strong against infantry and weak against vehicles and buildings, and tank cannons are the reverse. Harvesters and the Pioneer are unarmed.
 - **Orders.** With armed units selected, right-clicking an enemy orders an attack. They close to weapon range, follow a target that moves, and stop when it is destroyed. A move order cancels an attack.
 - **Instincts.** An idle unit fires at any enemy that comes into range without leaving its post. If something out of reach shoots at it, it goes after the attacker, and idle allies nearby join in.
-- **The outpost.** Until there is an AI opponent, each game starts with a red enemy outpost in the south-east: a few buildings and guards that defend themselves but build nothing.
 - **Winning.** A side is beaten when it has no buildings left and no Pioneer to start again.
 
-Still to come in phase 2: maps and terrain, fog of war, defensive buildings, a minimap, repairing buildings and sound.
+### Defences and repair
+
+- **Gun Turret.** A one-cell defensive building that needs a Barracks. It out-ranges every unit and fires on anything hostile that approaches, but falls silent if the base is short of power.
+- **Repair.** The Repair button, then a click on a damaged building, restores its health over time. A full repair from nothing costs 30% of the building's price. It pauses if credits run out, and a second click stops it.
+
+### Fog of war and the radar
+
+- **Shroud.** Ground nobody has seen is black. Ground seen earlier but not in view now is dimmed.
+- **Sight.** Every unit and building sees a few cells around itself. Enemy units only appear while something of yours can see them, and enemy buildings stay marked once discovered.
+- **Radar.** A map of the whole battlefield sits at the top of the sidebar. Clicking or dragging on it moves the camera.
+
+### Terrain
+
+Maps are generated from the game's seed, with rocky outcrops, lakes and woods that block movement and building. Both starting areas are kept clear, each has an ore field within reach, and a map is only accepted if there is a way between the two bases.
+
+### The computer opponent
+
+The enemy starts with a Construction Yard in the south-east and plays by the same rules as the player, with the same costs, build times and commands.
+
+- It builds power, a refinery, a barracks, a war factory and turrets, keeping spare power in hand and leaving lanes between buildings.
+- It runs harvesters, repairs badly damaged buildings and rebuilds what it loses.
+- Its army grows gradually. The first attack comes no sooner than four minutes in, with later waves at least ninety seconds apart and larger each time.
+- It runs inside the simulation, so in multiplayer every machine will see it make the same decisions.
+
+### Sound
+
+Shots, cannon fire, explosions, collapsing buildings, order confirmations and build notifications are all synthesised in the browser, so there are no audio files to load or license. Sounds from the fog are silent, and those off-screen are quieter. M mutes.
+
+### Still to come
+
+Hand-made maps and a map editor, more unit and building types, a second faction, multiplayer on Cloudflare, music, proper art, and balance.
 
 ## What the classics confirmed
 

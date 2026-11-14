@@ -5,6 +5,9 @@ import {
   BUILDING_DEFS,
   BUILD_RANGE,
   MIN_POWER_RATE,
+  REPAIR_COST_PERCENT,
+  REPAIR_HP,
+  REPAIR_INTERVAL,
   SELL_REFUND_PERCENT,
   cellIndex,
   dockCell,
@@ -221,15 +224,40 @@ export function placeProduction(
   return building;
 }
 
+/** Starts or stops repairing a damaged building. */
+export function toggleRepair(world: World, player: number, buildingId: number): void {
+  const b = world.buildings.find((x) => x.id === buildingId);
+  if (!b || b.owner !== player || b.selling || !isActive(b)) return;
+  b.repairing = !b.repairing && b.hp < BUILDING_DEFS[b.type].hp;
+}
+
 export function sellBuilding(world: World, player: number, buildingId: number): void {
   const b = world.buildings.find((x) => x.id === buildingId);
   if (!b || b.owner !== player || b.selling) return;
   b.selling = true;
+  b.repairing = false;
+}
+
+/** Restores a little health in exchange for credits. Pauses when the money runs out. */
+function repairStep(world: World, b: Building): void {
+  const def = BUILDING_DEFS[b.type];
+  if (b.selling || b.hp >= def.hp) {
+    b.repairing = false;
+    return;
+  }
+  if (world.tick % REPAIR_INTERVAL !== 0) return;
+  const price = Math.max(1, Math.ceil((def.cost * REPAIR_COST_PERCENT * REPAIR_HP) / (def.hp * 100)));
+  const p = world.players[b.owner];
+  if (p.credits < price) return;
+  p.credits -= price;
+  b.hp = Math.min(def.hp, b.hp + REPAIR_HP);
+  if (b.hp >= def.hp) b.repairing = false;
 }
 
 /** Advances build-up animations, and packs away buildings that are being sold. */
 export function tickBuildings(world: World, events: SimEvent[]): void {
   for (const b of world.buildings.slice()) {
+    if (b.repairing) repairStep(world, b);
     if (!b.selling) {
       if (b.progress < b.total && ++b.progress === b.total && b.type === 'refinery') {
         // Every refinery comes with a harvester, which sets off on its own.

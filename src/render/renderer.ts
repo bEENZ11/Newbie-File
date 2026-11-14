@@ -5,6 +5,9 @@ import {
   BUILDING_DEFS,
   HARVEST_CAPACITY,
   MAP_H,
+  ROCK,
+  TREES,
+  WATER,
   MAP_W,
   SUB,
   cellIndex,
@@ -68,6 +71,7 @@ interface BuildingView {
   obj: THREE.Group;
   stages: THREE.Object3D[];
   arm: THREE.Object3D | null;
+  head: THREE.Object3D | null;
   frame: THREE.Mesh;
 }
 
@@ -91,6 +95,7 @@ export class Renderer {
   private overlayMat = new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false });
   /** Building outlines sit on the ground, so walls in front hide them. */
   private frameMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  private repairMat = new THREE.MeshBasicMaterial({ color: 0x4fd16a, transparent: true });
   private preview: THREE.Mesh;
   private previewFrame: THREE.Mesh;
   private flashPool: THREE.Mesh[] = [];
@@ -106,7 +111,10 @@ export class Renderer {
   private effects = new Effects(this.scene);
   private healthBars = new HealthBars(this.scene);
 
-  constructor(private canvas: HTMLCanvasElement) {
+  constructor(
+    private canvas: HTMLCanvasElement,
+    world: World,
+  ) {
     this.gl = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.gl.shadowMap.enabled = true;
     this.gl.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -126,7 +134,8 @@ export class Renderer {
     this.sun.shadow.normalBias = 0.03;
     this.scene.add(this.sun, this.sun.target);
 
-    this.scene.add(this.makeTerrain());
+    this.scene.add(this.makeTerrain(world));
+    this.addScenery(world);
 
     // Fog of war: one texel per cell, drawn over everything on the ground.
     this.fogTexture = new THREE.DataTexture(this.fogData, MAP_W, MAP_H, THREE.RGBAFormat);
@@ -191,7 +200,54 @@ export class Renderer {
     this.gl.setSize(ui.viewW, ui.viewH, false);
   }
 
-  private makeTerrain(): THREE.Mesh {
+  /** Boulders on rock, and trees in the woods. Lakes are painted into the ground. */
+  private addScenery(world: World): void {
+    const rocks: THREE.Matrix4[] = [];
+    const trunks: THREE.Matrix4[] = [];
+    const crowns: THREE.Matrix4[] = [];
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    for (let y = 0; y < MAP_H; y++) {
+      for (let x = 0; x < MAP_W; x++) {
+        const type = world.terrain[cellIndex(x, y)];
+        if (type === ROCK) {
+          for (let i = 0; i < 3; i++) {
+            const s = 0.22 + noise(x, y, 100 + i) * 0.26;
+            e.set(noise(x, y, 110 + i) * 3, noise(x, y, 120 + i) * 6, noise(x, y, 130 + i) * 3);
+            rocks.push(
+              new THREE.Matrix4().compose(
+                new THREE.Vector3(x + 0.2 + noise(x, y, 140 + i) * 0.6, s * 0.55, y + 0.2 + noise(x, y, 150 + i) * 0.6),
+                q.setFromEuler(e),
+                new THREE.Vector3(s, s * 0.8, s),
+              ),
+            );
+          }
+        } else if (type === TREES) {
+          for (let i = 0; i < 2; i++) {
+            const h = 0.7 + noise(x, y, 160 + i) * 0.5;
+            const px = x + 0.25 + noise(x, y, 170 + i) * 0.5;
+            const pz = y + 0.25 + noise(x, y, 180 + i) * 0.5;
+            q.identity();
+            trunks.push(new THREE.Matrix4().compose(new THREE.Vector3(px, 0.15, pz), q, new THREE.Vector3(0.07, 0.3, 0.07)));
+            crowns.push(new THREE.Matrix4().compose(new THREE.Vector3(px, 0.3 + h / 2, pz), q, new THREE.Vector3(0.32, h, 0.32)));
+          }
+        }
+      }
+    }
+    const add = (geo: THREE.BufferGeometry, colour: number, spots: THREE.Matrix4[]): void => {
+      if (spots.length === 0) return;
+      const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: colour, flatShading: true }), spots.length);
+      spots.forEach((m, i) => mesh.setMatrixAt(i, m));
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this.scene.add(mesh);
+    };
+    add(new THREE.DodecahedronGeometry(1), 0x7b7f86, rocks);
+    add(new THREE.CylinderGeometry(1, 1, 1, 6), 0x5a4030, trunks);
+    add(new THREE.ConeGeometry(1, 1, 7), 0x2f6b34, crowns);
+  }
+
+  private makeTerrain(world: World): THREE.Mesh {
     const c = document.createElement('canvas');
     c.width = MAP_W * TERRAIN_TEXELS;
     c.height = MAP_H * TERRAIN_TEXELS;
@@ -201,7 +257,15 @@ export class Renderer {
       for (let x = 0; x < MAP_W; x++) {
         const light = 31 + noise(x, y, 1) * 1.1;
         const hue = 92 + noise(x, y, 2) * 4;
-        g.fillStyle = `hsl(${hue} 30% ${light}%)`;
+        const ground = world.terrain[cellIndex(x, y)];
+        g.fillStyle =
+          ground === WATER
+            ? `hsl(${205 + noise(x, y, 3) * 6} 48% ${30 + noise(x, y, 4) * 3}%)`
+            : ground === ROCK
+              ? `hsl(40 9% ${30 + noise(x, y, 5) * 4}%)`
+              : ground === TREES
+                ? `hsl(${hue} 30% ${light - 6}%)`
+                : `hsl(${hue} 30% ${light}%)`;
         g.fillRect(x * t, y * t, t, t);
         for (let i = 0; i < 9; i++) {
           g.fillStyle = noise(x, y, 10 + i) > 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.09)';
@@ -409,15 +473,17 @@ export class Renderer {
         obj.position.set(b.cx + b.w / 2, 0, b.cy + b.h / 2);
         const stages: THREE.Object3D[] = [];
         let arm: THREE.Object3D | null = null;
+        let head: THREE.Object3D | null = null;
         obj.traverse((o) => {
           if (typeof o.userData.stage === 'number') stages[o.userData.stage] = o;
           if (o.userData.arm) arm = o;
+          if (o.userData.head) head = o;
         });
         const frame = new THREE.Mesh(frameGeometry(b.w + 0.1, b.h + 0.1, 0.06), this.frameMat);
         frame.position.y = 0.03;
         obj.add(frame);
         this.scene.add(obj);
-        view = { obj, stages, arm, frame };
+        view = { obj, stages, arm, head, frame };
         this.buildingViews.set(b.id, view);
       }
       // Build-up: each part rises out of the ground in turn.
@@ -430,7 +496,12 @@ export class Renderer {
         stage.scale.y = Math.max(0.001, eased);
       });
       if (view.arm && p >= 1) view.arm.rotation.y = Math.sin(now * 0.0005 + b.id) * 1.1 - 0.5;
-      view.frame.visible = ui.selectedBuilding === b.id;
+      if (view.head) view.head.rotation.y = (-b.aim * Math.PI) / 4;
+      // A building under repair pulses green.
+      const mending = b.repairing && b.owner === LOCAL_PLAYER;
+      view.frame.material = mending ? this.repairMat : this.frameMat;
+      this.repairMat.opacity = 0.55 + 0.45 * Math.sin(now * 0.008);
+      view.frame.visible = ui.selectedBuilding === b.id || mending;
       // Enemy buildings stay on the map once they have been discovered.
       view.obj.visible = b.owner === LOCAL_PLAYER || footprintSeen(vision.explored, b);
     }

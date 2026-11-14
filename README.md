@@ -19,7 +19,11 @@ Then open the address it prints. Add `?seed=123` to the address to get the same 
 - Base building from the sidebar: Power Plant, Ore Refinery, Barracks and War Factory, with prerequisites, pay-as-you-build costs, hold and cancel, placement beside your base, power and selling.
 - The economy: each refinery comes with a harvester that digs ore, carries it back and unloads it for credits with no input. Harvesters queue at the dock and steer round each other.
 - Units: riflemen from the Barracks, light tanks and extra harvesters from the War Factory, with queues, rally points, group movement and control groups.
-- Combat: health, weapons with strengths and weaknesses, attack orders, units that defend themselves, and a red enemy outpost to destroy.
+- Combat: health, weapons with strengths and weaknesses, attack orders and units that defend themselves.
+- Gun turrets, building repair, fog of war and a radar map.
+- Generated terrain with rocks, lakes and woods.
+- A computer opponent that builds a base, harvests, and attacks in growing waves.
+- Synthesised sound effects.
 - A deterministic simulation running at 20 ticks a second, separate from drawing and input.
 
 ## Commands

@@ -1,10 +1,20 @@
+import { Sounds } from './audio';
 import { Input } from './input/input';
 import { Minimap } from './minimap';
 import { Renderer } from './render/renderer';
 import { Sidebar } from './sidebar';
 import { checkPlacement, powerOf } from './sim/production';
 import { Sim } from './sim/sim';
-import { BUILDING_DEFS, HARVEST_CAPACITY, TICK_RATE, UNIT_DEFS, type UnitType } from './sim/types';
+import {
+  BUILDING_DEFS,
+  HARVEST_CAPACITY,
+  MAP_H,
+  MAP_W,
+  SUB,
+  TICK_RATE,
+  UNIT_DEFS,
+  type UnitType,
+} from './sim/types';
 import { START_CX, START_CY, spawnUnit } from './sim/world';
 import { LOCAL_PLAYER, createUi, placementOrigin } from './ui';
 
@@ -14,15 +24,41 @@ const canvas = document.getElementById('game') as HTMLCanvasElement;
 const hintEl = document.getElementById('hint')!;
 const dragEl = document.getElementById('dragbox')!;
 const bannerEl = document.getElementById('banner')!;
+const againEl = document.getElementById('again')!;
+againEl.addEventListener('click', () => location.reload());
+window.addEventListener('keydown', (e) => {
+  if ((e.key === 'm' || e.key === 'M') && !e.repeat) sounds.toggleMute();
+});
 
 // The seed is chosen outside the simulation. Add ?seed=123 to replay a layout.
 const seedParam = Number(new URLSearchParams(location.search).get('seed'));
 const seed = Number.isInteger(seedParam) && seedParam !== 0 ? seedParam : Date.now() & 0x7fffffff;
 
-// Every game currently starts with an enemy outpost to find and destroy.
-const sim = new Sim(seed, { outpost: true });
+// A skirmish against the computer, on a map with rocks, lakes and woods.
+const sim = new Sim(seed, { ai: [1], terrain: true });
+const sounds = new Sounds();
+
+// A small blip confirms each order as it is given.
+const issue = sim.issue.bind(sim);
+sim.issue = (cmd) => {
+  issue(cmd);
+  if (cmd.type === 'move' || cmd.type === 'attack' || cmd.type === 'rally') sounds.play('order');
+  else if (cmd.type !== 'place') sounds.play('click');
+};
+
+/** How loud something at a map position should be: full on screen, fainter beyond, silent in the fog. */
+function loudness(x: number, z: number): number {
+  const cx = Math.floor(x);
+  const cz = Math.floor(z);
+  if (cx < 0 || cz < 0 || cx >= MAP_W || cz >= MAP_H) return 0;
+  if (!sim.world.vision[LOCAL_PLAYER].visible[cz * MAP_W + cx]) return 0;
+  const dx = Math.abs(x - ui.camX) / (ui.viewW / ui.zoom / 2);
+  const dz = Math.abs(z - ui.camZ) / (ui.viewH / ui.zoom / 2);
+  const d = Math.max(dx, dz);
+  return d <= 1 ? 1 : Math.max(0.15, 1 / (d * d));
+}
 const ui = createUi();
-const renderer = new Renderer(canvas);
+const renderer = new Renderer(canvas, sim.world);
 const input = new Input(canvas, sim, ui, renderer);
 const sidebar = new Sidebar(document.getElementById('sidebar')!, sim, ui);
 const minimap = new Minimap(document.getElementById('minimap') as HTMLCanvasElement, sim, ui, () =>
@@ -42,8 +78,23 @@ input.clampCamera();
 function handleEvents(now: number): void {
   for (const ev of sim.events) {
     renderer.onEvent(ev, now);
+    if (ev.type === 'shot') {
+      sounds.play(ev.kind === 'bullet' ? 'rifle' : 'cannon', loudness(ev.fromX / SUB, ev.fromY / SUB));
+    } else if (ev.type === 'unitDied') {
+      sounds.play('blast', loudness(ev.x / SUB, ev.y / SUB));
+    } else if (ev.type === 'buildingDestroyed') {
+      sounds.play('collapse', loudness(ev.cx + ev.w / 2, ev.cy + ev.h / 2));
+    } else if (ev.type === 'placed' && ev.player === LOCAL_PLAYER) {
+      sounds.play('placed');
+    } else if ((ev.type === 'productionReady' || ev.type === 'unitReady') && ev.player === LOCAL_PLAYER) {
+      sounds.play('ready');
+    } else if ((ev.type === 'placeRefused' && ev.player === LOCAL_PLAYER) || ev.type === 'deployBlocked') {
+      sounds.play('refused');
+    }
     if (ev.type === 'gameOver') {
       const won = ev.winner === LOCAL_PLAYER;
+      sounds.play(won ? 'victory' : 'defeat');
+      againEl.style.display = 'block';
       bannerEl.textContent = won ? 'Victory' : 'Defeat';
       bannerEl.dataset.result = won ? 'won' : 'lost';
       bannerEl.style.display = 'block';
@@ -68,7 +119,7 @@ function currentHint(): string {
   const prod = player.production;
 
   if (world.winner !== -1) {
-    return world.winner === LOCAL_PLAYER ? 'The enemy outpost is destroyed' : 'Your base has been wiped out';
+    return world.winner === LOCAL_PLAYER ? 'The enemy base is destroyed' : 'Your base has been wiped out';
   }
 
   if (ui.placing) {
@@ -78,6 +129,7 @@ function currentHint(): string {
     return 'Left-click to place. Right-click to put it back';
   }
   if (ui.sellMode) return 'Click a building to sell it for half its cost. Right-click to stop';
+  if (ui.repairMode) return 'Click a damaged building to repair it for credits. Click again to stop';
   const chosen = world.units.filter((u) => ui.selectedUnits.has(u.id));
   if (chosen.some((u) => UNIT_DEFS[u.type].weapon)) {
     return `${chosen.length} selected. Right-click ground to move, or an enemy to attack. Shift and a number saves the group`;
@@ -110,7 +162,7 @@ function currentHint(): string {
   }
   if (prod) return `Building ${BUILDING_DEFS[prod.type].name}. Right-click it to put it on hold`;
   if (powerOf(world, LOCAL_PLAYER).low) return 'Low power is slowing production. Build a Power Plant';
-  return 'An enemy outpost lies to the south-east. Build an army and destroy it';
+  return 'The enemy base lies to the south-east, and it will come for you. Build defences and an army';
 }
 
 function updateHud(): void {
@@ -119,7 +171,7 @@ function updateHud(): void {
 
   const hint = currentHint();
   if (hintEl.textContent !== hint) hintEl.textContent = hint;
-  document.body.dataset.mode = ui.placing ? 'placing' : ui.sellMode ? 'sell' : 'normal';
+  document.body.dataset.mode = ui.placing ? 'placing' : ui.sellMode ? 'sell' : ui.repairMode ? 'repair' : 'normal';
 
   const box = ui.dragBox;
   dragEl.style.display = box ? 'block' : 'none';

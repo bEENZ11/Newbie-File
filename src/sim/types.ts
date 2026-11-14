@@ -23,6 +23,17 @@ export const UNLOAD_RATE = 10;
 export const BLOCKED_PATIENCE = 8;
 /** How far a building can see beyond its own walls, in cells. */
 export const BUILDING_SIGHT = 5;
+/** Health restored by each repair step, and the ticks between steps. */
+export const REPAIR_HP = 10;
+export const REPAIR_INTERVAL = 5;
+/** A full repair from nothing costs this share of the building's price, as a percentage. */
+export const REPAIR_COST_PERCENT = 30;
+
+/** Ground types. Anything other than grass cannot be crossed or built on. */
+export const GRASS = 0;
+export const ROCK = 1;
+export const WATER = 2;
+export const TREES = 3;
 
 export type UnitType = 'pioneer' | 'harvester' | 'rifleman' | 'tank';
 export const UNIT_TYPES: readonly UnitType[] = ['pioneer', 'harvester', 'rifleman', 'tank'];
@@ -58,7 +69,7 @@ export const HARVEST_JOBS: readonly HarvestJob[] = [
   'idle',
   'manual',
 ];
-export type BuildingType = 'conyard' | 'power' | 'refinery' | 'barracks' | 'factory';
+export type BuildingType = 'conyard' | 'power' | 'refinery' | 'barracks' | 'factory' | 'turret';
 
 /** Fixed order, used for the sidebar and for hashing. */
 export const BUILDING_TYPES: readonly BuildingType[] = [
@@ -67,6 +78,7 @@ export const BUILDING_TYPES: readonly BuildingType[] = [
   'refinery',
   'barracks',
   'factory',
+  'turret',
 ];
 
 /** What a target is made of, which decides how much each weapon hurts it. */
@@ -105,6 +117,8 @@ export interface UnitDef {
 export interface BuildingDef {
   name: string;
   hp: number;
+  /** Defensive buildings carry a weapon, which needs full power to fire. */
+  weapon?: WeaponDef;
   w: number;
   h: number;
   cost: number;
@@ -239,6 +253,24 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     power: -30,
     requires: ['refinery'],
   },
+  turret: {
+    name: 'Gun Turret',
+    hp: 400,
+    weapon: {
+      range: 6,
+      damage: 35,
+      cooldown: 30,
+      kind: 'shell',
+      versus: { infantry: 60, vehicle: 100, building: 100 },
+    },
+    w: 1,
+    h: 1,
+    cost: 600,
+    produceTicks: 240,
+    buildTicks: 20,
+    power: -20,
+    requires: ['barracks'],
+  },
 };
 
 export interface Unit {
@@ -297,6 +329,11 @@ export interface Building {
   progress: number;
   total: number;
   hp: number;
+  /** Turrets only: ticks until the next shot, and the way the gun points. */
+  cooldown: number;
+  aim: number;
+  /** True while credits are being spent to restore its health. */
+  repairing: boolean;
   selling: boolean;
   /** Where new units gather, as a cell index, or -1 for just outside the door. */
   rally: number;
@@ -342,12 +379,16 @@ export interface World {
   players: Player[];
   units: Unit[];
   buildings: Building[];
+  /** Ground type per cell. */
+  terrain: Uint8Array;
   /** Ore amount per cell. */
   ore: Int32Array;
   /** 1 where a building stands. Derived from buildings. */
   blocked: Uint8Array;
   /** The id of the unit holding each cell, or 0. Derived from units. */
   occupied: Int32Array;
+  /** Per player: the computer opponent's memory, or null for a person. */
+  ai: ({ wave: number; lastWave: number } | null)[];
   /** Per player: cells in view right now, and cells seen at any time. */
   vision: { visible: Uint8Array; explored: Uint8Array }[];
 }
@@ -364,7 +405,8 @@ export type Command =
   | { type: 'train'; player: number; unit: UnitType }
   | { type: 'untrain'; player: number; unit: UnitType }
   | { type: 'rally'; player: number; buildingId: number; cx: number; cy: number }
-  | { type: 'attack'; player: number; unitIds: number[]; targetId: number };
+  | { type: 'attack'; player: number; unitIds: number[]; targetId: number }
+  | { type: 'repair'; player: number; buildingId: number };
 
 /** One-off notifications for the UI. Never read back by the simulation. */
 export type SimEvent =

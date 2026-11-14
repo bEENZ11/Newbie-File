@@ -1,12 +1,14 @@
 // Combat: targeting, firing, damage and destruction.
 
 import { FACING, haltUnit, isSettled, setDestination } from './movement';
+import { powerOf } from './production';
 import { removeBuilding, removeUnit } from './world';
 import {
   BUILDING_DEFS,
   MAP_W,
   UNIT_DEFS,
   cellCentre,
+  isActive,
   type ArmourClass,
   type Building,
   type SimEvent,
@@ -174,6 +176,8 @@ export function tickCombat(world: World, events: SimEvent[]): void {
     }
   }
 
+  tickTurrets(world, events);
+
   // Clear away everything destroyed this tick.
   for (const unit of world.units.slice()) {
     if (unit.hp > 0) continue;
@@ -187,6 +191,48 @@ export function tickCombat(world: World, events: SimEvent[]): void {
   }
 
   checkVictory(world, events);
+}
+
+/** Defensive buildings fire on the nearest enemy unit in range, if they have the power. */
+function tickTurrets(world: World, events: SimEvent[]): void {
+  for (const b of world.buildings) {
+    const weapon = BUILDING_DEFS[b.type].weapon;
+    if (!weapon || !isActive(b) || b.hp <= 0) continue;
+    if (b.cooldown > 0) b.cooldown--;
+    if (b.cooldown > 0 || powerOf(world, b.owner).low) continue;
+
+    let victim: Unit | null = null;
+    let bestD = weapon.range * weapon.range + 1;
+    for (const u of world.units) {
+      if (u.owner === b.owner || u.hp <= 0) continue;
+      const dx = cellX(u.cell) - b.cx;
+      const dy = cellY(u.cell) - b.cy;
+      const d = dx * dx + dy * dy;
+      if (d < bestD) {
+        victim = u;
+        bestD = d;
+      }
+    }
+    if (!victim) continue;
+
+    const dx = cellX(victim.cell) - b.cx;
+    const dy = cellY(victim.cell) - b.cy;
+    const sx = Math.abs(dx) * 2 >= Math.abs(dy) ? Math.sign(dx) : 0;
+    const sy = Math.abs(dy) * 2 >= Math.abs(dx) ? Math.sign(dy) : 0;
+    if (sx !== 0 || sy !== 0) b.aim = FACING[sy + 1][sx + 1];
+    b.cooldown = weapon.cooldown;
+    const armour = UNIT_DEFS[victim.type].armour;
+    victim.hp -= Math.max(1, Math.floor((weapon.damage * weapon.versus[armour]) / 100));
+    raiseAlarm(world, victim.owner, cellX(victim.cell), cellY(victim.cell), b.id);
+    events.push({
+      type: 'shot',
+      kind: weapon.kind,
+      fromX: cellCentre(b.cx),
+      fromY: cellCentre(b.cy),
+      toX: victim.x,
+      toY: victim.y,
+    });
+  }
 }
 
 /** A player is out once they have no buildings left and no Pioneer to start again. */

@@ -1,3 +1,4 @@
+import { tickAi } from './ai';
 import { orderAttack, tickCombat } from './combat';
 import { VISION_INTERVAL, updateVision } from './vision';
 import { orderHarvester, tickHarvesters } from './harvest';
@@ -7,6 +8,7 @@ import {
   holdProduction,
   placeProduction,
   sellBuilding,
+  toggleRepair,
   startProduction,
   tickBuildings,
   tickProduction,
@@ -27,6 +29,7 @@ import {
 /** Advances the world by exactly one tick. */
 export function stepWorld(world: World, commands: readonly Command[], events: SimEvent[]): void {
   for (const cmd of commands) applyCommand(world, cmd, events);
+  tickAi(world, events);
 
   for (const unit of world.units) {
     unit.prevX = unit.x;
@@ -93,6 +96,9 @@ function applyCommand(world: World, cmd: Command, events: SimEvent[]): void {
       break;
     case 'attack':
       orderAttack(world, cmd.player, cmd.unitIds, cmd.targetId);
+      break;
+    case 'repair':
+      toggleRepair(world, cmd.player, cmd.buildingId);
       break;
   }
 }

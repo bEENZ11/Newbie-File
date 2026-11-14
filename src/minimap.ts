@@ -2,12 +2,17 @@
 
 import { SIN_PITCH } from './render/renderer';
 import type { Sim } from './sim/sim';
-import { MAP_H, MAP_W, cellIndex } from './sim/types';
+import { MAP_H, MAP_W, ROCK, TREES, WATER, cellIndex } from './sim/types';
 import { LOCAL_PLAYER, type UiState } from './ui';
 
 type RGB = [number, number, number];
 const GROUND: RGB = [58, 84, 44];
 const ORE: RGB = [214, 160, 40];
+const GROUND_BY_TYPE: Record<number, RGB> = {
+  [ROCK]: [112, 110, 104],
+  [WATER]: [44, 92, 140],
+  [TREES]: [34, 62, 34],
+};
 const TEAM: RGB[] = [
   [90, 160, 255],
   [255, 84, 70],
@@ -71,7 +76,7 @@ export class Minimap {
 
     for (let i = 0; i < MAP_W * MAP_H; i++) {
       if (!explored[i]) put(i, [0, 0, 0], 1);
-      else put(i, world.ore[i] > 0 ? ORE : GROUND, visible[i] ? 1 : 0.55);
+      else put(i, world.ore[i] > 0 ? ORE : (GROUND_BY_TYPE[world.terrain[i]] ?? GROUND), visible[i] ? 1 : 0.55);
     }
     for (const b of world.buildings) {
       for (let y = b.cy; y < b.cy + b.h; y++) {

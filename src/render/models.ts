@@ -319,12 +319,29 @@ function buildFactory(): THREE.Group {
   return finish(root);
 }
 
+/** userData.head marks the gun, which swivels to track its target. */
+function buildTurret(): THREE.Group {
+  const { root, stage } = staged();
+  stage(box(0.9, 0.1, 0.9, CONCRETE, 0, 0, 0));
+  stage(cyl(0.3, 0.36, 0.3, STEEL, 0, 0.1, 0));
+  const head = new THREE.Group();
+  head.position.set(0, 0.4, 0);
+  head.userData.head = true;
+  head.add(box(0.5, 0.24, 0.46, team.main, 0, 0, 0));
+  head.add(box(0.52, 0.05, 0.48, team.light, 0, 0.24, 0));
+  head.add(box(0.5, 0.08, 0.08, STEEL_DARK, 0.45, 0.09, -0.1));
+  head.add(box(0.5, 0.08, 0.08, STEEL_DARK, 0.45, 0.09, 0.1));
+  stage(head);
+  return finish(root);
+}
+
 const BUILDERS: Record<BuildingType, () => THREE.Group> = {
   conyard: buildConyard,
   power: buildPowerPlant,
   refinery: buildRefinery,
   barracks: buildBarracks,
   factory: buildFactory,
+  turret: buildTurret,
 };
 
 const UNIT_BUILDERS: Record<UnitType, () => THREE.Group> = {
