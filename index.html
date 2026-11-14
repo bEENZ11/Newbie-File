@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RTS Prototype</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #101214;
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+        color: #e8ecef;
+        user-select: none;
+      }
+      #game {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+        cursor: crosshair;
+      }
+      .panel {
+        position: fixed;
+        background: rgba(16, 19, 22, 0.86);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 6px;
+        pointer-events: none;
+      }
+      #topbar {
+        top: 12px;
+        right: 12px;
+        padding: 8px 14px;
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+      }
+      #topbar .label {
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #9aa5ae;
+      }
+      #credits {
+        font-size: 20px;
+        font-weight: 650;
+        font-variant-numeric: tabular-nums;
+        color: #f0c14b;
+      }
+      #hint {
+        left: 50%;
+        bottom: 16px;
+        transform: translateX(-50%);
+        padding: 8px 16px;
+        font-size: 14px;
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="topbar" class="panel">
+      <span class="label">Credits</span>
+      <span id="credits">0</span>
+    </div>
+    <div id="hint" class="panel"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
