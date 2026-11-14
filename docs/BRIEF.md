@@ -8,11 +8,12 @@ Phase 1 covers the base-building and economy loop only: place buildings, power t
 
 ## Phase 1 goal
 
-A player can open the page and, starting with one Construction Yard and some credits, do all of this:
+A player can open the page and, starting with one Pioneer vehicle and some credits, do all of this:
 
-1. Build a Power Plant, Ore Refinery, Barracks and War Factory from a sidebar.
-2. Watch a harvester collect ore and turn it into credits without being told to.
-3. Train infantry and build vehicles, then select them and move them around.
+1. Drive the Pioneer to a spot of their choosing and deploy it into a Construction Yard.
+2. Build a Power Plant, Ore Refinery, Barracks and War Factory from a sidebar.
+3. Watch a harvester collect ore and turn it into credits without being told to.
+4. Train infantry and build vehicles, then select them and move them around.
 
 If that loop feels right, everything else has something solid to sit on.
 
@@ -56,11 +57,20 @@ A flat test field of 64 by 64 cells with a few ore patches. Each cell is either 
 
 | Building | Requires | Power | Role |
 | --- | --- | --- | --- |
-| Construction Yard | Present at start | 0 | Unlocks the building list |
+| Construction Yard | A deployed Pioneer | 0 | Unlocks the building list |
 | Power Plant | Construction Yard | +100 | Supplies power |
 | Ore Refinery | Power Plant | -30 | Receives ore, comes with one free harvester |
 | Barracks | Power Plant | -20 | Trains infantry |
 | War Factory | Ore Refinery | -30 | Builds vehicles |
+
+### The Pioneer
+
+The player starts with a Pioneer, a large, slow vehicle that carries the base. (Pioneer is a working name.)
+
+- It is selected and moved like any other unit.
+- Pressing D with it selected, or double-clicking it, deploys it. It needs a clear three by three area around it. If the area is blocked, the footprint flashes red and nothing happens.
+- Deploying plays an unfolding animation, after which the vehicle is gone and a Construction Yard stands in its place. The sidebar's building list appears at that moment.
+- Deployment is one-way in phase 1. Packing the yard back up into a vehicle, and building further Pioneers to expand, can come later.
 
 ### Construction
 
@@ -88,6 +98,7 @@ Total supply is compared with total demand. If demand is higher, all production 
 
 | Unit | Built at | Role in phase 1 |
 | --- | --- | --- |
+| Pioneer | Present at start | Deploys into the Construction Yard |
 | Rifleman | Barracks | Basic infantry |
 | Light Tank | War Factory | Basic vehicle |
 | Harvester | War Factory | Extra ore income |
@@ -108,6 +119,7 @@ Total supply is compared with total demand. If demand is higher, all production 
 | Deselect, or cancel placement | Right-click on empty ground with nothing to order, or Escape |
 | Save a control group | Ctrl and a number key |
 | Recall a control group | The number key |
+| Deploy the Pioneer | D, or double-click it |
 | Set a rally point | Select a production building, right-click the ground |
 | Scroll the camera | Arrow keys or screen edge |
 
@@ -134,10 +146,11 @@ Phase 1 uses placeholder art drawn in code: simple shapes in the player's colour
 ## Build order
 
 1. **Foundations.** Project setup, the grid, camera scrolling, and the tick-based simulation loop.
-2. **Building.** Sidebar, construction, placement, prerequisites, power and selling.
-3. **Economy.** Ore, harvesters, refineries and credits.
-4. **Units.** Production queues, rally points, selection, pathfinding and movement.
-5. **Proof.** An automated test that replays a recorded game twice and confirms both runs end in an identical state.
+2. **Deployment.** The Pioneer, basic unit selection and movement, and deploying into the Construction Yard.
+3. **Building.** Sidebar, construction, placement, prerequisites, power and selling.
+4. **Economy.** Ore, harvesters, refineries and credits.
+5. **Units.** Production queues, rally points, box selection, control groups and pathfinding around obstacles.
+6. **Proof.** An automated test that replays a recorded game twice and confirms both runs end in an identical state.
 
 Each step ends with something playable in the browser.
 
@@ -158,5 +171,5 @@ We read the published source of the classic games and OpenRA to understand how p
 ## Decisions still open
 
 - **Name and setting.** The game needs a working title and a theme for its factions.
-- **Starting state.** The brief assumes the Construction Yard is already placed. The alternative is starting with a vehicle that deploys into one.
+- **Vehicle name.** Pioneer is a placeholder for the deploying base vehicle.
 - **Placement rule.** The brief uses "within two cells of an existing building". We could loosen or tighten that once we can feel it.
