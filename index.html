@@ -46,7 +46,8 @@
         border-left: 1px solid var(--line);
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 12px;
+        overflow-y: auto;
       }
       .label {
         font-size: 11px;
@@ -102,7 +103,7 @@
       #power.low #power-text {
         color: #ff8078;
       }
-      #structures {
+      .list {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 8px;
@@ -114,8 +115,8 @@
       }
       .build {
         position: relative;
-        height: 86px;
-        padding: 8px 6px 6px;
+        height: 74px;
+        padding: 7px 6px 5px;
         background: #232a31;
         border: 1px solid var(--line);
         border-radius: 5px;
@@ -143,6 +144,17 @@
         font-size: 12px;
         color: var(--gold);
         font-variant-numeric: tabular-nums;
+      }
+      .build .count {
+        position: absolute;
+        top: 4px;
+        right: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #fff;
+      }
+      .build[data-state='queued'] {
+        border-color: rgba(79, 160, 255, 0.6);
       }
       .build .status {
         font-size: 11px;
@@ -252,7 +264,15 @@
       </div>
       <div>
         <div class="label">Structures</div>
-        <div id="structures"></div>
+        <div id="structures" class="list"></div>
+      </div>
+      <div>
+        <div class="label">Infantry</div>
+        <div id="infantry" class="list"></div>
+      </div>
+      <div>
+        <div class="label">Vehicles</div>
+        <div id="vehicle" class="list"></div>
       </div>
       <button id="sell">Sell a building</button>
     </aside>

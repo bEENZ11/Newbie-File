@@ -67,6 +67,16 @@ function currentHint(): string {
       : 'Left-click the Pioneer to select it';
   }
   const picked = world.units.find((u) => ui.selectedUnits.has(u.id) && u.type === 'harvester');
+  const chosen = world.units.filter((u) => ui.selectedUnits.has(u.id));
+  if (chosen.length > 1) {
+    return `${chosen.length} units selected. Right-click to move. Shift and a number saves the group`;
+  }
+  const producer = world.buildings.find(
+    (b) => b.id === ui.selectedBuilding && (b.type === 'barracks' || b.type === 'factory'),
+  );
+  if (producer) {
+    return `${BUILDING_DEFS[producer.type].name} selected. Right-click the ground to set where new units gather`;
+  }
   if (picked) {
     return `Harvester carrying ${picked.cargo} of ${HARVEST_CAPACITY}. Right-click ore to dig or a refinery to unload`;
   }
@@ -80,7 +90,7 @@ function currentHint(): string {
   }
   if (prod) return `Building ${BUILDING_DEFS[prod.type].name}. Right-click it to put it on hold`;
   if (powerOf(world, LOCAL_PLAYER).low) return 'Low power is slowing production. Build a Power Plant';
-  return 'Choose a building from the sidebar';
+  return 'Choose something to build from the sidebar';
 }
 
 function updateHud(): void {

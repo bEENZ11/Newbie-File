@@ -71,7 +71,7 @@ class Heap {
 }
 
 /** The closest passable cell to the goal, searching outwards in rings. */
-function nearestFree(blocked: Uint8Array, w: number, h: number, gx: number, gy: number): number {
+export function nearestFree(blocked: Uint8Array, w: number, h: number, gx: number, gy: number): number {
   const max = Math.max(w, h);
   for (let r = 0; r < max; r++) {
     let best = -1;

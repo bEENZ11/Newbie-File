@@ -158,6 +158,36 @@ function buildHarvester(): THREE.Group {
   return finish(g);
 }
 
+function buildRifleman(): THREE.Group {
+  const g = new THREE.Group();
+  // Legs, body and helmeted head.
+  g.add(box(0.07, 0.2, 0.07, STEEL_DARK, 0, 0, -0.05));
+  g.add(box(0.07, 0.2, 0.07, STEEL_DARK, 0, 0, 0.05));
+  g.add(box(0.13, 0.22, 0.2, TEAM, 0, 0.2, 0));
+  g.add(box(0.12, 0.05, 0.08, TEAM_DARK, -0.09, 0.26, 0));
+  g.add(box(0.1, 0.1, 0.1, 0xe0b48c, 0, 0.42, 0));
+  g.add(box(0.13, 0.05, 0.13, TEAM_DARK, 0, 0.5, 0));
+  // Rifle held forward.
+  g.add(box(0.3, 0.035, 0.035, RUBBER, 0.14, 0.3, 0.09));
+  g.scale.setScalar(1.35);
+  return finish(g);
+}
+
+function buildTank(): THREE.Group {
+  const g = new THREE.Group();
+  g.add(box(1.1, 0.22, 0.22, RUBBER, 0, 0, -0.32));
+  g.add(box(1.1, 0.22, 0.22, RUBBER, 0, 0, 0.32));
+  g.add(box(1.0, 0.2, 0.5, TEAM_DARK, 0, 0.1, 0));
+  g.add(box(0.86, 0.1, 0.78, TEAM, -0.02, 0.24, 0));
+  // Turret and gun.
+  g.add(box(0.44, 0.2, 0.44, TEAM, -0.08, 0.34, 0));
+  g.add(box(0.46, 0.04, 0.46, TEAM_LIGHT, -0.08, 0.54, 0));
+  g.add(box(0.62, 0.07, 0.07, STEEL_DARK, 0.42, 0.41, 0));
+  g.add(box(0.1, 0.1, 0.1, STEEL_DARK, 0.7, 0.395, 0));
+  g.scale.setScalar(1.1);
+  return finish(g);
+}
+
 /** userData.arm marks the crane arm, which swings once the yard is working. */
 function buildConyard(): THREE.Group {
   const { root, stage } = staged();
@@ -288,6 +318,8 @@ const BUILDERS: Record<BuildingType, () => THREE.Group> = {
 const UNIT_BUILDERS: Record<UnitType, () => THREE.Group> = {
   pioneer: buildPioneer,
   harvester: buildHarvester,
+  rifleman: buildRifleman,
+  tank: buildTank,
 };
 
 const unitTemplates = new Map<UnitType, THREE.Group>();
@@ -352,4 +384,19 @@ export function frameGeometry(w: number, d: number, thickness: number): THREE.Bu
   const geo = new THREE.ShapeGeometry(shape);
   geo.rotateX(-Math.PI / 2);
   return geo;
+}
+
+/** The flag marking where a building sends its new units. */
+export function makeRallyFlag(): THREE.Group {
+  const g = new THREE.Group();
+  const white = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const green = new THREE.MeshBasicMaterial({ color: 0x7dff8e });
+  const pole = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.1, 0.05), white);
+  pole.position.y = 0.55;
+  const flag = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.26, 0.03), green);
+  flag.position.set(0.22, 0.95, 0);
+  const base = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.3, 24).rotateX(-Math.PI / 2), green);
+  base.position.y = 0.03;
+  g.add(pole, flag, base);
+  return g;
 }

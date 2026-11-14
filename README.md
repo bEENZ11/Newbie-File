@@ -18,6 +18,7 @@ Then open the address it prints. Add `?seed=123` to the address to get the same 
 - The Pioneer: left-click to select, right-click to drive, press D or double-click to deploy it into a Construction Yard.
 - Base building from the sidebar: Power Plant, Ore Refinery, Barracks and War Factory, with prerequisites, pay-as-you-build costs, hold and cancel, placement beside your base, power and selling.
 - The economy: each refinery comes with a harvester that digs ore, carries it back and unloads it for credits with no input. Harvesters queue at the dock and steer round each other.
+- Units: riflemen from the Barracks, light tanks and extra harvesters from the War Factory, with queues, rally points, group movement and control groups.
 - A deterministic simulation running at 20 ticks a second, separate from drawing and input.
 
 ## Commands

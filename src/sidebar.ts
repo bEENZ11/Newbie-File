@@ -1,14 +1,25 @@
-// The build sidebar: credits, power and the list of structures.
+// The build sidebar: credits, power, structures and units.
 
 import { canProduce, missingFor, powerOf } from './sim/production';
 import type { Sim } from './sim/sim';
-import { BUILDING_DEFS, BUILDING_TYPES, TICK_RATE, type BuildingType } from './sim/types';
+import { canTrain, missingForUnit } from './sim/training';
+import {
+  BUILDING_DEFS,
+  BUILDING_TYPES,
+  TICK_RATE,
+  UNIT_DEFS,
+  UNIT_TYPES,
+  type BuildingType,
+  type UnitType,
+} from './sim/types';
 import { LOCAL_PLAYER, type UiState } from './ui';
 
 interface Entry {
-  type: BuildingType;
   button: HTMLButtonElement;
   status: HTMLElement;
+  count: HTMLElement;
+  /** Works out how this button should look right now. */
+  view: () => { state: string; label: string; progress: number; count: number; placing: boolean };
 }
 
 export class Sidebar {
@@ -22,7 +33,7 @@ export class Sidebar {
   private shownCredits = -1;
 
   constructor(
-    root: HTMLElement,
+    private root: HTMLElement,
     private sim: Sim,
     private ui: UiState,
   ) {
@@ -31,26 +42,12 @@ export class Sidebar {
     this.powerFill = root.querySelector('#power-fill')!;
     this.powerText = root.querySelector('#power-text')!;
     this.sellButton = root.querySelector('#sell')!;
-    const list = root.querySelector('#structures')!;
 
     for (const type of BUILDING_TYPES) {
-      const def = BUILDING_DEFS[type];
-      if (def.produceTicks <= 0) continue;
-      const button = document.createElement('button');
-      button.className = 'build';
-      button.dataset.type = type;
-      button.innerHTML =
-        `<span class="clock"></span>` +
-        `<span class="name">${def.name}</span>` +
-        `<span class="cost">${def.cost.toLocaleString('en-GB')}</span>` +
-        `<span class="status"></span>`;
-      button.addEventListener('click', () => this.onClick(type));
-      button.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        this.onRightClick(type);
-      });
-      list.appendChild(button);
-      this.entries.push({ type, button, status: button.querySelector('.status')! });
+      if (BUILDING_DEFS[type].produceTicks > 0) this.addStructure(type);
+    }
+    for (const type of UNIT_TYPES) {
+      if (UNIT_DEFS[type].queue) this.addUnit(type);
     }
 
     this.sellButton.addEventListener('click', () => {
@@ -61,28 +58,118 @@ export class Sidebar {
     root.addEventListener('mousedown', (e) => e.stopPropagation());
   }
 
-  private onClick(type: BuildingType): void {
-    const prod = this.sim.world.players[LOCAL_PLAYER].production;
-    this.ui.sellMode = false;
-    if (!prod) {
-      this.sim.issue({ type: 'build', player: LOCAL_PLAYER, building: type });
-    } else if (prod.type === type && prod.state === 'held') {
-      this.sim.issue({ type: 'build', player: LOCAL_PLAYER, building: type });
-    } else if (prod.type === type && prod.state === 'ready') {
-      this.ui.placing = this.ui.placing === type ? null : type;
-    }
+  private addButton(
+    listId: string,
+    name: string,
+    cost: number,
+    onClick: () => void,
+    onRightClick: () => void,
+    view: Entry['view'],
+  ): void {
+    const button = document.createElement('button');
+    button.className = 'build';
+    button.innerHTML =
+      `<span class="clock"></span>` +
+      `<span class="count"></span>` +
+      `<span class="name">${name}</span>` +
+      `<span class="cost">${cost.toLocaleString('en-GB')}</span>` +
+      `<span class="status"></span>`;
+    button.addEventListener('click', onClick);
+    button.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      onRightClick();
+    });
+    this.root.querySelector(listId)!.appendChild(button);
+    this.entries.push({
+      button,
+      status: button.querySelector('.status')!,
+      count: button.querySelector('.count')!,
+      view,
+    });
   }
 
-  /** First right-click puts the item on hold, the second cancels it. */
-  private onRightClick(type: BuildingType): void {
-    const prod = this.sim.world.players[LOCAL_PLAYER].production;
-    if (!prod || prod.type !== type) return;
-    if (prod.state === 'active') {
-      this.sim.issue({ type: 'hold', player: LOCAL_PLAYER });
-    } else {
-      this.sim.issue({ type: 'cancel', player: LOCAL_PLAYER });
-      this.ui.placing = null;
-    }
+  private addStructure(type: BuildingType): void {
+    const def = BUILDING_DEFS[type];
+    const { sim, ui } = this;
+    const production = () => sim.world.players[LOCAL_PLAYER].production;
+
+    const onClick = (): void => {
+      const prod = production();
+      ui.sellMode = false;
+      if (!prod || (prod.type === type && prod.state === 'held')) {
+        sim.issue({ type: 'build', player: LOCAL_PLAYER, building: type });
+      } else if (prod.type === type && prod.state === 'ready') {
+        ui.placing = ui.placing === type ? null : type;
+      }
+    };
+    // First right-click puts the item on hold, the second cancels it.
+    const onRightClick = (): void => {
+      const prod = production();
+      if (!prod || prod.type !== type) return;
+      if (prod.state === 'active') {
+        sim.issue({ type: 'hold', player: LOCAL_PLAYER });
+      } else {
+        sim.issue({ type: 'cancel', player: LOCAL_PLAYER });
+        ui.placing = null;
+      }
+    };
+
+    this.addButton('#structures', def.name, def.cost, onClick, onRightClick, () => {
+      const prod = production();
+      const mine = prod?.type === type ? prod : null;
+      const placing = ui.placing === type;
+      if (mine) {
+        const progress = mine.progress / mine.total;
+        const pct = Math.floor(progress * 100);
+        const label =
+          mine.state === 'ready'
+            ? placing
+              ? 'Choose a spot'
+              : 'Ready'
+            : mine.state === 'held'
+              ? `On hold ${pct}%`
+              : `${pct}%`;
+        return { state: mine.state, label, progress, count: 0, placing };
+      }
+      if (!canProduce(sim.world, LOCAL_PLAYER, type)) {
+        const missing = missingFor(sim.world, LOCAL_PLAYER, type);
+        const label = missing.length ? `Needs ${BUILDING_DEFS[missing[0]].name}` : '';
+        return { state: 'locked', label, progress: 0, count: 0, placing };
+      }
+      if (prod) return { state: 'busy', label: '', progress: 0, count: 0, placing };
+      return { state: 'idle', label: seconds(def.produceTicks), progress: 0, count: 0, placing };
+    });
+  }
+
+  private addUnit(type: UnitType): void {
+    const def = UNIT_DEFS[type];
+    const kind = def.queue!;
+    const { sim } = this;
+    const queue = () => sim.world.players[LOCAL_PLAYER].queues[kind];
+
+    // Each click queues one more. Right-click holds, then removes.
+    const onClick = (): void => sim.issue({ type: 'train', player: LOCAL_PLAYER, unit: type });
+    const onRightClick = (): void => sim.issue({ type: 'untrain', player: LOCAL_PLAYER, unit: type });
+
+    this.addButton(`#${kind}`, def.name, def.cost, onClick, onRightClick, () => {
+      const q = queue();
+      const count = q.items.filter((t) => t === type).length;
+      const head = q.items[0] === type;
+      if (head) {
+        const progress = q.progress / def.produceTicks;
+        const pct = Math.floor(progress * 100);
+        return q.held
+          ? { state: 'held', label: `On hold ${pct}%`, progress, count, placing: false }
+          : { state: 'active', label: `${pct}%`, progress, count, placing: false };
+      }
+      if (count > 0) return { state: 'queued', label: 'Queued', progress: 0, count, placing: false };
+      if (!canTrain(sim.world, LOCAL_PLAYER, type)) {
+        const missing = missingForUnit(sim.world, LOCAL_PLAYER, type);
+        const label = missing.length ? `Needs ${BUILDING_DEFS[missing[0]].name}` : '';
+        return { state: 'locked', label, progress: 0, count: 0, placing: false };
+      }
+      return { state: 'idle', label: seconds(def.produceTicks), progress: 0, count: 0, placing: false };
+    });
   }
 
   update(): void {
@@ -108,35 +195,21 @@ export class Sidebar {
       power.low ? `Low power  ${power.supply} / ${power.demand}` : `${power.supply} / ${power.demand}`,
     );
 
-    const prod = player.production;
-    for (const { type, button, status } of this.entries) {
-      const mine = prod?.type === type ? prod : null;
-      const unlocked = canProduce(world, LOCAL_PLAYER, type);
-      let label = '';
-      let state = 'idle';
-      if (mine) {
-        state = mine.state;
-        const pct = Math.floor((mine.progress / mine.total) * 100);
-        button.style.setProperty('--p', `${(mine.progress / mine.total) * 360}deg`);
-        if (mine.state === 'ready') label = this.ui.placing === type ? 'Choose a spot' : 'Ready';
-        else if (mine.state === 'held') label = `On hold ${pct}%`;
-        else label = `${pct}%`;
-      } else if (!unlocked) {
-        state = 'locked';
-        const missing = missingFor(world, LOCAL_PLAYER, type);
-        label = missing.length ? `Needs ${BUILDING_DEFS[missing[0]].name}` : '';
-      } else if (prod) {
-        state = 'busy';
-      } else {
-        label = `${Math.round(BUILDING_DEFS[type].produceTicks / TICK_RATE)}s`;
-      }
-      if (button.dataset.state !== state) button.dataset.state = state;
-      button.classList.toggle('placing', this.ui.placing === type);
-      setText(status, label);
+    for (const entry of this.entries) {
+      const v = entry.view();
+      if (entry.button.dataset.state !== v.state) entry.button.dataset.state = v.state;
+      entry.button.style.setProperty('--p', `${v.progress * 360}deg`);
+      entry.button.classList.toggle('placing', v.placing);
+      setText(entry.status, v.label);
+      setText(entry.count, v.count > 1 ? `×${v.count}` : '');
     }
 
     this.sellButton.classList.toggle('on', this.ui.sellMode);
   }
+}
+
+function seconds(ticks: number): string {
+  return `${Math.round(ticks / TICK_RATE)}s`;
 }
 
 function setText(el: HTMLElement, text: string): void {

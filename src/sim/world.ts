@@ -10,9 +10,11 @@ import {
   cellCentre,
   cellIndex,
   inBounds,
+  QUEUE_KINDS,
   type Building,
   type BuildingType,
   type Unit,
+  type UnitQueue,
   type UnitType,
   type World,
 } from './types';
@@ -25,7 +27,13 @@ export function createWorld(seed: number): World {
     tick: 0,
     rng: seed | 0,
     nextId: 1,
-    players: [{ credits: STARTING_CREDITS, production: null, speedAcc: 0 }],
+    players: [
+      {
+        credits: STARTING_CREDITS,
+        production: null,
+        queues: { infantry: emptyQueue(), vehicle: emptyQueue() },
+      },
+    ],
     units: [],
     buildings: [],
     ore: new Int32Array(MAP_W * MAP_H),
@@ -36,6 +44,8 @@ export function createWorld(seed: number): World {
   spawnUnit(world, 'pioneer', 0, START_CX, START_CY);
   return world;
 }
+
+const emptyQueue = (): UnitQueue => ({ items: [], progress: 0, paid: 0, held: false, speedAcc: 0 });
 
 /** A few ore patches, kept clear of the starting position. */
 function scatterOre(world: World): void {
@@ -142,6 +152,7 @@ export function addBuilding(
     progress: 0,
     total: def.buildTicks,
     selling: false,
+    rally: -1,
   };
   world.buildings.push(building);
   setBlocked(world, building, 1);
@@ -177,14 +188,23 @@ export function hashWorld(world: World): number {
   mix(world.nextId);
   for (const p of world.players) {
     mix(p.credits);
-    mix(p.speedAcc);
     const prod = p.production;
     mix(prod ? 1 : 0);
     if (prod) {
       mix(BUILDING_TYPES.indexOf(prod.type));
       mix(prod.progress);
       mix(prod.paid);
+      mix(prod.speedAcc);
       mix(PRODUCTION_STATES.indexOf(prod.state));
+    }
+    for (const kind of QUEUE_KINDS) {
+      const q = p.queues[kind];
+      mix(q.items.length);
+      for (const item of q.items) mix(UNIT_TYPES.indexOf(item));
+      mix(q.progress);
+      mix(q.paid);
+      mix(q.speedAcc);
+      mix(q.held ? 1 : 0);
     }
   }
   for (const u of world.units) {
@@ -216,6 +236,7 @@ export function hashWorld(world: World): number {
     mix(b.cy);
     mix(b.progress);
     mix(b.selling ? 1 : 0);
+    mix(b.rally);
   }
   for (let i = 0; i < world.ore.length; i++) mix(world.ore[i]);
   return h >>> 0;

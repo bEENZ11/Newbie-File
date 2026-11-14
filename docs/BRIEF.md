@@ -105,8 +105,12 @@ Total supply is compared with total demand. If demand is higher, the power bar t
 | Light Tank | War Factory | Basic vehicle |
 | Harvester | War Factory | Extra ore income |
 
-- Each production building has its own queue, so infantry and vehicles build in parallel.
-- New units appear at the building's exit and walk to its rally point.
+- Infantry and vehicles are trained in two separate lines that run side by side, each holding up to twelve units. Clicking a unit adds one to its line.
+- Right-clicking the unit in progress puts it on hold, and again cancels it with a refund. Right-clicking a unit that is only waiting drops one from the line.
+- New units appear at the building's door and move to its rally point, which starts just clear of the door. Select the building and right-click the ground to move it.
+- A harvester built at the War Factory needs a refinery first, and heads straight for ore.
+- A group ordered to one spot forms up around it, each unit taking a cell of its own.
+- Dragging a box over troops leaves harvesters and the Pioneer out of the selection, so the economy is never pulled off its work by accident.
 - Units find their way around buildings and each other using grid pathfinding. No two units share a cell: a blocked unit waits briefly, then finds a way round.
 - Units can move but not fight yet. Combat is the first job of phase 2.
 
@@ -119,8 +123,9 @@ Total supply is compared with total demand. If demand is higher, the power bar t
 | Add to selection | Shift and left-click |
 | Move, or harvest if ore is clicked | Right-click |
 | Deselect, or cancel placement | Right-click on empty ground with nothing to order, or Escape |
-| Save a control group | Ctrl and a number key |
-| Recall a control group | The number key |
+| Save a control group | Ctrl or Shift, and a number key |
+| Recall a control group | The number key. Press twice to jump the camera to it |
+| Zoom | Mouse wheel |
 | Deploy the Pioneer | D, or double-click it |
 | Set a rally point | Select a production building, right-click the ground |
 | Scroll the camera | Arrow keys or screen edge |

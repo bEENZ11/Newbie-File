@@ -22,8 +22,14 @@ export const UNLOAD_RATE = 10;
 /** Ticks a unit waits behind another before trying a way round. */
 export const BLOCKED_PATIENCE = 8;
 
-export type UnitType = 'pioneer' | 'harvester';
-export const UNIT_TYPES: readonly UnitType[] = ['pioneer', 'harvester'];
+export type UnitType = 'pioneer' | 'harvester' | 'rifleman' | 'tank';
+export const UNIT_TYPES: readonly UnitType[] = ['pioneer', 'harvester', 'rifleman', 'tank'];
+
+/** Units are trained in two lines that run side by side. */
+export type QueueKind = 'infantry' | 'vehicle';
+export const QUEUE_KINDS: readonly QueueKind[] = ['infantry', 'vehicle'];
+/** Most units that can wait in one line at a time. */
+export const MAX_QUEUE = 12;
 
 /**
  * What a harvester is doing. 'manual' means the player moved it by hand, so
@@ -65,6 +71,13 @@ export interface UnitDef {
   name: string;
   /** Sub-cell units moved per tick. */
   speed: number;
+  cost: number;
+  /** Ticks to train at full power. */
+  produceTicks: number;
+  /** Which line trains it, or null if it cannot be trained. */
+  queue: QueueKind | null;
+  /** Buildings needed besides the one that trains it. */
+  requires: readonly BuildingType[];
 }
 
 export interface BuildingDef {
@@ -83,8 +96,17 @@ export interface BuildingDef {
 }
 
 export const UNIT_DEFS: Record<UnitType, UnitDef> = {
-  pioneer: { name: 'Pioneer', speed: 32 },
-  harvester: { name: 'Harvester', speed: 40 },
+  pioneer: { name: 'Pioneer', speed: 32, cost: 2500, produceTicks: 0, queue: null, requires: [] },
+  harvester: {
+    name: 'Harvester',
+    speed: 40,
+    cost: 1100,
+    produceTicks: 360,
+    queue: 'vehicle',
+    requires: ['refinery'],
+  },
+  rifleman: { name: 'Rifleman', speed: 22, cost: 80, produceTicks: 80, queue: 'infantry', requires: [] },
+  tank: { name: 'Light Tank', speed: 44, cost: 600, produceTicks: 240, queue: 'vehicle', requires: [] },
 };
 
 // Placeholder numbers of our own, to be tuned once the whole loop is playable.
@@ -188,6 +210,8 @@ export interface Building {
   progress: number;
   total: number;
   selling: boolean;
+  /** Where new units gather, as a cell index, or -1 for just outside the door. */
+  rally: number;
 }
 
 /** The structure a player is producing in the sidebar. */
@@ -200,13 +224,23 @@ export interface Production {
   paid: number;
   /** 'ready' means finished and waiting to be placed on the map. */
   state: 'active' | 'held' | 'ready';
+  /** Carries fractional production speed between ticks when power is low. */
+  speedAcc: number;
+}
+
+/** A line of units being trained. The first item is the one in progress. */
+export interface UnitQueue {
+  items: UnitType[];
+  progress: number;
+  paid: number;
+  held: boolean;
+  speedAcc: number;
 }
 
 export interface Player {
   credits: number;
   production: Production | null;
-  /** Carries fractional production speed between ticks when power is low. */
-  speedAcc: number;
+  queues: Record<QueueKind, UnitQueue>;
 }
 
 export interface World {
@@ -232,7 +266,10 @@ export type Command =
   | { type: 'hold'; player: number }
   | { type: 'cancel'; player: number }
   | { type: 'place'; player: number; cx: number; cy: number }
-  | { type: 'sell'; player: number; buildingId: number };
+  | { type: 'sell'; player: number; buildingId: number }
+  | { type: 'train'; player: number; unit: UnitType }
+  | { type: 'untrain'; player: number; unit: UnitType }
+  | { type: 'rally'; player: number; buildingId: number; cx: number; cy: number };
 
 /** One-off notifications for the UI. Never read back by the simulation. */
 export type SimEvent =
@@ -241,7 +278,8 @@ export type SimEvent =
   | { type: 'productionReady'; player: number; building: BuildingType }
   | { type: 'placed'; player: number; buildingId: number }
   | { type: 'placeRefused'; player: number; cx: number; cy: number; w: number; h: number }
-  | { type: 'sold'; player: number; buildingId: number; refund: number };
+  | { type: 'sold'; player: number; buildingId: number; refund: number }
+  | { type: 'unitReady'; player: number; unitId: number; unit: UnitType };
 
 export const cellIndex = (cx: number, cy: number): number => cy * MAP_W + cx;
 export const inBounds = (cx: number, cy: number): boolean =>
@@ -253,3 +291,15 @@ export const isActive = (b: Building): boolean => !b.selling && b.progress >= b.
 
 /** The cell in front of a refinery where a harvester pulls up to unload. */
 export const dockCell = (b: Building): { x: number; y: number } => ({ x: b.cx + 2, y: b.cy + b.h });
+
+/** The building each line needs in order to train anything. */
+export const QUEUE_BUILDING: Record<QueueKind, BuildingType> = {
+  infantry: 'barracks',
+  vehicle: 'factory',
+};
+
+/** The cell just outside a production building's door, where new units appear. */
+export const exitCell = (b: Building): { x: number; y: number } => ({
+  x: b.cx + (b.type === 'factory' ? 1 : 0),
+  y: b.cy + b.h,
+});

@@ -9,10 +9,12 @@ import {
   SUB,
   cellIndex,
   type BuildingType,
+  type UnitType,
   type World,
 } from '../sim/types';
 import { LOCAL_PLAYER, placementOrigin, type UiState } from '../ui';
-import { frameGeometry, makeBuilding, makeGhost, makeUnit } from './models';
+import { rallyPoint } from '../sim/training';
+import { frameGeometry, makeBuilding, makeGhost, makeRallyFlag, makeUnit } from './models';
 
 // The view is 3D with a fixed camera: looking north, tilted down at the ground.
 // One cell is one world unit, x runs east and z runs south.
@@ -32,6 +34,9 @@ function noise(x: number, y: number, salt: number): number {
   h = Math.imul(h ^ (h >>> 15), 2246822519);
   return ((h ^ (h >>> 13)) >>> 0) / 4294967296;
 }
+
+/** Selection ring size for each kind of unit, as a share of the largest. */
+const RING_SIZE: Record<UnitType, number> = { pioneer: 1, harvester: 0.8, tank: 0.7, rifleman: 0.34 };
 
 /** How many nuggets to draw on a cell, so a field visibly thins as it is mined. */
 function oreNuggets(amount: number): number {
@@ -79,6 +84,7 @@ export class Renderer {
   /** One tile per footprint cell while placing, green or red. */
   private ghostCells: THREE.Mesh[] = [];
   private ghosts = new Map<BuildingType, THREE.Group>();
+  private rallyFlag = makeRallyFlag();
   private markerPool: THREE.Mesh[] = [];
   private lastDraw = 0;
 
@@ -115,6 +121,9 @@ export class Renderer {
     );
     this.preview.visible = this.previewFrame.visible = false;
     this.scene.add(this.preview, this.previewFrame);
+
+    this.rallyFlag.visible = false;
+    this.scene.add(this.rallyFlag);
 
     const tile = new THREE.PlaneGeometry(0.92, 0.92).rotateX(-Math.PI / 2);
     for (let i = 0; i < 10; i++) {
@@ -317,7 +326,7 @@ export class Renderer {
         });
         const ring = new THREE.Mesh(this.ringGeo, this.overlayMat);
         ring.position.y = 0.04;
-        ring.scale.setScalar((u.type === 'harvester' ? 0.8 : 1) / obj.scale.x);
+        ring.scale.setScalar(RING_SIZE[u.type] / obj.scale.x);
         ring.renderOrder = 2;
         obj.add(ring);
         this.scene.add(obj);
@@ -437,6 +446,16 @@ export class Renderer {
     }
 
     this.syncPlacement(world, ui);
+
+    // A flag shows where the selected Barracks or War Factory sends its units.
+    const producer = world.buildings.find(
+      (b) => b.id === ui.selectedBuilding && (b.type === 'barracks' || b.type === 'factory'),
+    );
+    this.rallyFlag.visible = !!producer;
+    if (producer) {
+      const r = rallyPoint(producer);
+      this.rallyFlag.position.set(r.x + 0.5, 0, r.y + 0.5);
+    }
 
     ui.flashes = ui.flashes.filter((f) => now - f.t < FLASH_MS);
     this.flashPool.forEach((mesh, i) => {

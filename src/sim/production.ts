@@ -12,6 +12,7 @@ import {
   isActive,
   type Building,
   type BuildingType,
+  type Player,
   type SimEvent,
   type World,
 } from './types';
@@ -67,8 +68,8 @@ export function startProduction(world: World, player: number, type: BuildingType
     total: BUILDING_DEFS[type].produceTicks,
     paid: 0,
     state: 'active',
+    speedAcc: 0,
   };
-  p.speedAcc = 0;
 }
 
 export function holdProduction(world: World, player: number): void {
@@ -84,33 +85,48 @@ export function cancelProduction(world: World, player: number): void {
   p.production = null;
 }
 
+/** Production speed out of 256. Low power slows it in proportion to the shortfall. */
+export function productionRate(world: World, player: number): number {
+  const power = powerOf(world, player);
+  return power.low
+    ? Math.max(MIN_POWER_RATE, Math.floor((power.supply * 256) / power.demand))
+    : 256;
+}
+
+/**
+ * Moves one item of work forward by a tick, paying for it as it goes.
+ * Shared by buildings and units.
+ */
+export function advance(
+  p: Player,
+  job: { progress: number; paid: number; speedAcc: number },
+  cost: number,
+  total: number,
+  rate: number,
+): void {
+  job.speedAcc += rate;
+  while (job.speedAcc >= 256 && job.progress < total) {
+    job.speedAcc -= 256;
+    // Working from the running total keeps the final price exact, with no
+    // rounding drift.
+    const due = Math.floor((cost * (job.progress + 1)) / total) - job.paid;
+    if (due > p.credits) {
+      // Out of money: wait here until more arrives.
+      job.speedAcc = 0;
+      break;
+    }
+    p.credits -= due;
+    job.paid += due;
+    job.progress++;
+  }
+}
+
 export function tickProduction(world: World, events: SimEvent[]): void {
   world.players.forEach((p, player) => {
     const prod = p.production;
     if (!prod || prod.state !== 'active') return;
 
-    // Low power slows production in proportion to the shortfall.
-    const power = powerOf(world, player);
-    const rate = power.low
-      ? Math.max(MIN_POWER_RATE, Math.floor((power.supply * 256) / power.demand))
-      : 256;
-    p.speedAcc += rate;
-
-    const cost = BUILDING_DEFS[prod.type].cost;
-    while (p.speedAcc >= 256 && prod.progress < prod.total) {
-      p.speedAcc -= 256;
-      // Pay as it builds. Working from the running total keeps the final
-      // price exact, with no rounding drift.
-      const due = Math.floor((cost * (prod.progress + 1)) / prod.total) - prod.paid;
-      if (due > p.credits) {
-        // Out of money: wait here until more arrives.
-        p.speedAcc = 0;
-        break;
-      }
-      p.credits -= due;
-      prod.paid += due;
-      prod.progress++;
-    }
+    advance(p, prod, BUILDING_DEFS[prod.type].cost, prod.total, productionRate(world, player));
 
     if (prod.progress >= prod.total) {
       prod.state = 'ready';

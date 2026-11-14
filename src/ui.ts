@@ -27,6 +27,8 @@ export interface UiState {
   hoverZ: number;
   /** Selection box being dragged, in screen pixels. */
   dragBox: { x0: number; y0: number; x1: number; y1: number } | null;
+  /** Saved control groups, by number key. */
+  groups: Map<number, number[]>;
   /** Move order markers, in cells. */
   markers: { x: number; z: number; t: number }[];
   /** Red flashes where a deployment was refused, in cells. */
@@ -50,6 +52,7 @@ export function createUi(): UiState {
     hoverX: 0,
     hoverZ: 0,
     dragBox: null,
+    groups: new Map(),
     markers: [],
     flashes: [],
     mouseX: 0,

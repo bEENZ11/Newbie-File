@@ -17,6 +17,8 @@ const UNIT_PICK_HEIGHT = 0.4;
 export class Input {
   private keys = new Set<string>();
   private dragStart: { x: number; y: number } | null = null;
+  private lastGroup = -1;
+  private lastGroupAt = 0;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -142,10 +144,15 @@ export class Input {
       const x1 = Math.max(box.x0, box.x1);
       const y0 = Math.min(box.y0, box.y1);
       const y1 = Math.max(box.y0, box.y1);
-      for (const u of this.sim.world.units) {
+      const boxed = this.sim.world.units.filter((u) => {
         const s = this.unitScreenPos(u);
-        if (s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1) ui.selectedUnits.add(u.id);
-      }
+        return u.owner === LOCAL_PLAYER && s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1;
+      });
+      // A box drawn over an army leaves harvesters and the Pioneer alone, so
+      // sweeping up troops never pulls the economy off its work.
+      const isSoldier = (u: Unit): boolean => u.type === 'rifleman' || u.type === 'tank';
+      const picked = boxed.some(isSoldier) ? boxed.filter(isSoldier) : boxed;
+      for (const u of picked) ui.selectedUnits.add(u.id);
       if (ui.selectedUnits.size > 0) ui.selectedBuilding = null;
       return;
     }
@@ -164,7 +171,22 @@ export class Input {
   private rightClick(sx: number, sy: number): void {
     const ui = this.ui;
     if (ui.selectedUnits.size === 0) {
-      ui.selectedBuilding = null;
+      // With a Barracks or War Factory selected, a right-click sets its rally point.
+      const producer = this.sim.world.buildings.find(
+        (b) =>
+          b.id === ui.selectedBuilding &&
+          b.owner === LOCAL_PLAYER &&
+          (b.type === 'barracks' || b.type === 'factory'),
+      );
+      const spot = this.renderer.screenToGround(ui, sx, sy);
+      const rx = Math.floor(spot.x);
+      const ry = Math.floor(spot.z);
+      if (producer && rx >= 0 && ry >= 0 && rx < MAP_W && ry < MAP_H) {
+        this.sim.issue({ type: 'rally', player: LOCAL_PLAYER, buildingId: producer.id, cx: rx, cy: ry });
+        ui.markers.push({ x: rx + 0.5, z: ry + 0.5, t: performance.now() });
+      } else {
+        ui.selectedBuilding = null;
+      }
       return;
     }
     // Clicking a building's wall or roof counts as clicking the building,
@@ -235,6 +257,37 @@ export class Input {
           this.sim.issue({ type: 'deploy', player: LOCAL_PLAYER, unitId: u.id });
         }
       }
+    } else if (/^Digit[0-9]$/.test(e.code)) {
+      this.controlGroup(Number(e.code.slice(5)), e.ctrlKey || e.metaKey || e.shiftKey);
+      e.preventDefault();
     }
+  }
+
+  /**
+   * Ctrl or Shift with a number saves the selection. The number alone
+   * recalls it, and pressing it twice quickly jumps the camera there.
+   */
+  private controlGroup(n: number, save: boolean): void {
+    const ui = this.ui;
+    if (save) {
+      if (ui.selectedUnits.size > 0) ui.groups.set(n, [...ui.selectedUnits]);
+      return;
+    }
+    const members = (ui.groups.get(n) ?? [])
+      .map((id) => this.sim.world.units.find((u) => u.id === id))
+      .filter((u): u is Unit => !!u);
+    if (members.length === 0) return;
+    ui.selectedUnits = new Set(members.map((u) => u.id));
+    ui.selectedBuilding = null;
+    ui.placing = null;
+    ui.sellMode = false;
+    const now = performance.now();
+    if (this.lastGroup === n && now - this.lastGroupAt < 400) {
+      ui.camX = members.reduce((a, u) => a + u.x, 0) / members.length / SUB;
+      ui.camZ = members.reduce((a, u) => a + u.y, 0) / members.length / SUB;
+      this.clampCamera();
+    }
+    this.lastGroup = n;
+    this.lastGroupAt = now;
   }
 }

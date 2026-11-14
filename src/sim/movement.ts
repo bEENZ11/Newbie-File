@@ -1,7 +1,7 @@
 // Moving units around the grid. Each unit holds the cell it stands on, plus
 // the cell it is stepping into, so no two units ever share a cell.
 
-import { findPath } from './pathfinding';
+import { findPath, nearestFree } from './pathfinding';
 import {
   BLOCKED_PATIENCE,
   MAP_H,
@@ -24,31 +24,17 @@ const FACING = [
 export const isSettled = (unit: Unit): boolean => unit.stepTo === -1 && unit.path.length === 0;
 
 /**
- * Plans a route to a cell. Normally other units are ignored, since they will
- * usually have moved on by the time this one gets there. With avoidUnits set,
- * they are treated as obstacles, which is how a blocked unit finds a way round.
+ * Plans a route to a cell. Other units are ignored here, since they will
+ * usually have moved on by the time this one gets there.
  */
-export function setDestination(
-  world: World,
-  unit: Unit,
-  cx: number,
-  cy: number,
-  avoidUnits = false,
-): void {
+export function setDestination(world: World, unit: Unit, cx: number, cy: number): void {
   // A unit between cells finishes that step first and plans from there.
   // This keeps it on the grid so it never clips the corner of a building.
   const midStep = unit.stepTo;
   const start = midStep !== -1 ? midStep : unit.cell;
-  let blocked = world.blocked;
-  if (avoidUnits) {
-    blocked = world.blocked.slice();
-    for (let i = 0; i < blocked.length; i++) {
-      if (world.occupied[i] !== 0 && world.occupied[i] !== unit.id) blocked[i] = 1;
-    }
-  }
   const gx = Math.min(MAP_W - 1, Math.max(0, cx));
   const gy = Math.min(MAP_H - 1, Math.max(0, cy));
-  const route = findPath(blocked, MAP_W, MAP_H, start, gx, gy);
+  const route = findPath(world.blocked, MAP_W, MAP_H, start, gx, gy);
   unit.path = midStep !== -1 ? [midStep, ...route] : route;
   unit.dest = cellIndex(gx, gy);
   unit.wait = 0;
@@ -60,13 +46,43 @@ export function haltUnit(unit: Unit): void {
   unit.dest = -1;
 }
 
-function replan(world: World, unit: Unit, avoidUnits: boolean): void {
+/** Plans afresh after a building has appeared across the route. */
+function replan(world: World, unit: Unit): void {
   if (unit.dest === -1) {
     unit.path = [];
     return;
   }
   const dx = unit.dest % MAP_W;
-  setDestination(world, unit, dx, (unit.dest - dx) / MAP_W, avoidUnits);
+  setDestination(world, unit, dx, (unit.dest - dx) / MAP_W);
+}
+
+/**
+ * Called when another unit has been in the way for a while. Treats every
+ * other unit as an obstacle and looks for a way round.
+ */
+function goRound(world: World, unit: Unit): void {
+  unit.wait = 0;
+  if (unit.dest === -1) {
+    unit.path = [];
+    return;
+  }
+  const blocked = world.blocked.slice();
+  for (let i = 0; i < blocked.length; i++) {
+    if (world.occupied[i] !== 0 && world.occupied[i] !== unit.id) blocked[i] = 1;
+  }
+  const dx = unit.dest % MAP_W;
+  const goal = nearestFree(blocked, MAP_W, MAP_H, dx, (unit.dest - dx) / MAP_W);
+  if (goal === unit.cell || goal === -1) {
+    // Someone is parked on the destination and this is as close as it gets.
+    unit.path = [];
+    unit.dest = -1;
+    return;
+  }
+  const gx = goal % MAP_W;
+  const route = findPath(blocked, MAP_W, MAP_H, unit.cell, gx, (goal - gx) / MAP_W);
+  // No way round means it is boxed in for now. Keep the old route and wait
+  // for the crowd to clear.
+  if (route.length > 0) unit.path = route;
 }
 
 export function moveUnit(world: World, unit: Unit): void {
@@ -75,13 +91,13 @@ export function moveUnit(world: World, unit: Unit): void {
     const next = unit.path[0];
     if (world.blocked[next]) {
       // A building has gone up across the route.
-      replan(world, unit, false);
+      replan(world, unit);
       return;
     }
     const holder = world.occupied[next];
     if (holder !== 0 && holder !== unit.id) {
       // Someone is in the way. Give them a moment, then go round.
-      if (++unit.wait >= BLOCKED_PATIENCE) replan(world, unit, true);
+      if (++unit.wait >= BLOCKED_PATIENCE) goRound(world, unit);
       return;
     }
     world.occupied[next] = unit.id;

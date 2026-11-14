@@ -9,6 +9,7 @@ import {
   tickBuildings,
   tickProduction,
 } from './production';
+import { setRally, spreadDestinations, tickTraining, trainUnit, untrainUnit } from './training';
 import { addBuilding, removeUnit } from './world';
 import {
   BUILDING_DEFS,
@@ -39,6 +40,7 @@ export function stepWorld(world: World, commands: readonly Command[], events: Si
   }
 
   tickProduction(world, events);
+  tickTraining(world, events);
   tickBuildings(world, events);
 
   world.tick++;
@@ -51,13 +53,7 @@ function applyCommand(world: World, cmd: Command, events: SimEvent[]): void {
   switch (cmd.type) {
     case 'move':
       if (!inBounds(cmd.cx, cmd.cy)) break;
-      for (const id of cmd.unitIds) {
-        const unit = world.units.find((u) => u.id === id);
-        if (!unit || unit.owner !== cmd.player) continue;
-        unit.pendingDeploy = false;
-        if (unit.type === 'harvester') orderHarvester(world, unit, cmd.cx, cmd.cy);
-        else setDestination(world, unit, cmd.cx, cmd.cy);
-      }
+      moveGroup(world, cmd.player, cmd.unitIds, cmd.cx, cmd.cy);
       break;
     case 'deploy': {
       const unit = world.units.find((u) => u.id === cmd.unitId);
@@ -82,6 +78,37 @@ function applyCommand(world: World, cmd: Command, events: SimEvent[]): void {
     case 'sell':
       sellBuilding(world, cmd.player, cmd.buildingId);
       break;
+    case 'train':
+      trainUnit(world, cmd.player, cmd.unit);
+      break;
+    case 'untrain':
+      untrainUnit(world, cmd.player, cmd.unit);
+      break;
+    case 'rally':
+      setRally(world, cmd.player, cmd.buildingId, cmd.cx, cmd.cy);
+      break;
+  }
+}
+
+function moveGroup(world: World, player: number, unitIds: number[], cx: number, cy: number): void {
+  const units: Unit[] = [];
+  for (const id of unitIds) {
+    const unit = world.units.find((u) => u.id === id);
+    if (unit && unit.owner === player && !units.includes(unit)) units.push(unit);
+  }
+  // Harvesters read the order as dig here or unload there. The rest form up
+  // around the target, each with a cell of its own.
+  const squad = units.filter((u) => u.type !== 'harvester');
+  const spots = spreadDestinations(world, cx, cy, squad.length);
+  for (const unit of units) {
+    unit.pendingDeploy = false;
+    if (unit.type === 'harvester') {
+      orderHarvester(world, unit, cx, cy);
+    } else {
+      const spot = spots[squad.indexOf(unit)];
+      const sx = spot % MAP_W;
+      setDestination(world, unit, sx, (spot - sx) / MAP_W);
+    }
   }
 }
 
