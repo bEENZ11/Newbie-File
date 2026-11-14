@@ -1,3 +1,4 @@
+import { orderAttack, tickCombat } from './combat';
 import { orderHarvester, tickHarvesters } from './harvest';
 import { haltUnit, isSettled, moveUnit, setDestination } from './movement';
 import {
@@ -33,6 +34,7 @@ export function stepWorld(world: World, commands: readonly Command[], events: Si
   }
 
   tickHarvesters(world);
+  tickCombat(world, events);
 
   // Deploying removes units, so it runs on a copy of the list.
   for (const unit of world.units.slice()) {
@@ -87,6 +89,9 @@ function applyCommand(world: World, cmd: Command, events: SimEvent[]): void {
     case 'rally':
       setRally(world, cmd.player, cmd.buildingId, cmd.cx, cmd.cy);
       break;
+    case 'attack':
+      orderAttack(world, cmd.player, cmd.unitIds, cmd.targetId);
+      break;
   }
 }
 
@@ -102,6 +107,9 @@ function moveGroup(world: World, player: number, unitIds: number[], cx: number, 
   const spots = spreadDestinations(world, cx, cy, squad.length);
   for (const unit of units) {
     unit.pendingDeploy = false;
+    // A move order always overrides an attack.
+    unit.attack = 0;
+    unit.chase = false;
     if (unit.type === 'harvester') {
       orderHarvester(world, unit, cx, cy);
     } else {

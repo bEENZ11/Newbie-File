@@ -3,8 +3,8 @@ import { Renderer } from './render/renderer';
 import { Sidebar } from './sidebar';
 import { checkPlacement, powerOf } from './sim/production';
 import { Sim } from './sim/sim';
-import { BUILDING_DEFS, HARVEST_CAPACITY, TICK_RATE } from './sim/types';
-import { START_CX, START_CY } from './sim/world';
+import { BUILDING_DEFS, HARVEST_CAPACITY, TICK_RATE, UNIT_DEFS, type UnitType } from './sim/types';
+import { START_CX, START_CY, spawnUnit } from './sim/world';
 import { LOCAL_PLAYER, createUi, placementOrigin } from './ui';
 
 const TICK_MS = 1000 / TICK_RATE;
@@ -12,12 +12,14 @@ const TICK_MS = 1000 / TICK_RATE;
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const hintEl = document.getElementById('hint')!;
 const dragEl = document.getElementById('dragbox')!;
+const bannerEl = document.getElementById('banner')!;
 
 // The seed is chosen outside the simulation. Add ?seed=123 to replay a layout.
 const seedParam = Number(new URLSearchParams(location.search).get('seed'));
 const seed = Number.isInteger(seedParam) && seedParam !== 0 ? seedParam : Date.now() & 0x7fffffff;
 
-const sim = new Sim(seed);
+// Every game currently starts with an enemy outpost to find and destroy.
+const sim = new Sim(seed, { outpost: true });
 const ui = createUi();
 const renderer = new Renderer(canvas);
 const input = new Input(canvas, sim, ui, renderer);
@@ -35,6 +37,13 @@ input.clampCamera();
 
 function handleEvents(now: number): void {
   for (const ev of sim.events) {
+    renderer.onEvent(ev, now);
+    if (ev.type === 'gameOver') {
+      const won = ev.winner === LOCAL_PLAYER;
+      bannerEl.textContent = won ? 'Victory' : 'Defeat';
+      bannerEl.dataset.result = won ? 'won' : 'lost';
+      bannerEl.style.display = 'block';
+    }
     if (ev.type === 'deployBlocked') {
       ui.flashes.push({ cx: ev.cx, cy: ev.cy, w: ev.w, h: ev.h, t: now });
     } else if (ev.type === 'deployed' && ui.selectedUnits.delete(ev.unitId)) {
@@ -50,9 +59,13 @@ function handleEvents(now: number): void {
 function currentHint(): string {
   const world = sim.world;
   const player = world.players[LOCAL_PLAYER];
-  const pioneer = world.units.find((u) => u.type === 'pioneer');
-  const yard = world.buildings.find((b) => b.type === 'conyard');
+  const pioneer = world.units.find((u) => u.type === 'pioneer' && u.owner === LOCAL_PLAYER);
+  const yard = world.buildings.find((b) => b.type === 'conyard' && b.owner === LOCAL_PLAYER);
   const prod = player.production;
+
+  if (world.winner !== -1) {
+    return world.winner === LOCAL_PLAYER ? 'The enemy outpost is destroyed' : 'Your base has been wiped out';
+  }
 
   if (ui.placing) {
     const { cx, cy } = placementOrigin(ui, ui.placing);
@@ -61,16 +74,19 @@ function currentHint(): string {
     return 'Left-click to place. Right-click to put it back';
   }
   if (ui.sellMode) return 'Click a building to sell it for half its cost. Right-click to stop';
+  const chosen = world.units.filter((u) => ui.selectedUnits.has(u.id));
+  if (chosen.some((u) => UNIT_DEFS[u.type].weapon)) {
+    return `${chosen.length} selected. Right-click ground to move, or an enemy to attack. Shift and a number saves the group`;
+  }
+  if (chosen.length > 1) {
+    return `${chosen.length} units selected. Right-click to move. Shift and a number saves the group`;
+  }
   if (pioneer && !yard) {
     return ui.selectedUnits.has(pioneer.id)
       ? 'Right-click to drive. Press D or double-click the Pioneer to deploy'
       : 'Left-click the Pioneer to select it';
   }
   const picked = world.units.find((u) => ui.selectedUnits.has(u.id) && u.type === 'harvester');
-  const chosen = world.units.filter((u) => ui.selectedUnits.has(u.id));
-  if (chosen.length > 1) {
-    return `${chosen.length} units selected. Right-click to move. Shift and a number saves the group`;
-  }
   const producer = world.buildings.find(
     (b) => b.id === ui.selectedBuilding && (b.type === 'barracks' || b.type === 'factory'),
   );
@@ -90,7 +106,7 @@ function currentHint(): string {
   }
   if (prod) return `Building ${BUILDING_DEFS[prod.type].name}. Right-click it to put it on hold`;
   if (powerOf(world, LOCAL_PLAYER).low) return 'Low power is slowing production. Build a Power Plant';
-  return 'Choose something to build from the sidebar';
+  return 'An enemy outpost lies to the south-east. Build an army and destroy it';
 }
 
 function updateHud(): void {
@@ -118,10 +134,19 @@ function tidyUi(): void {
   }
   const prod = world.players[LOCAL_PLAYER].production;
   if (ui.placing && (prod?.state !== 'ready' || prod.type !== ui.placing)) ui.placing = null;
+  // Forget units that have been destroyed.
+  for (const id of ui.selectedUnits) {
+    if (!world.units.some((u) => u.id === id)) ui.selectedUnits.delete(id);
+  }
 }
 
 // Set game.debug.paused from the console to freeze the game and step it by hand.
-const debug = { paused: false };
+// game.debug.spawn drops a unit on the map, which is handy for trying out battles.
+const debug = {
+  paused: false,
+  spawn: (type: UnitType, owner: number, cx: number, cy: number) =>
+    spawnUnit(sim.world, type, owner, cx, cy),
+};
 
 let last = performance.now();
 let acc = 0;

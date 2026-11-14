@@ -5,9 +5,6 @@
 import * as THREE from 'three';
 import type { BuildingType, UnitType } from '../sim/types';
 
-const TEAM = 0x3f86e0;
-const TEAM_DARK = 0x24569c;
-const TEAM_LIGHT = 0x9cc4f7;
 const STEEL = 0x66717c;
 const STEEL_DARK = 0x3a424b;
 const STEEL_LIGHT = 0x9aa5af;
@@ -15,6 +12,21 @@ const CONCRETE = 0x7d868f;
 const RUBBER = 0x1c1f23;
 const HAZARD = 0xe8b730;
 const GLASS = 0xbfe3ff;
+
+interface Palette {
+  main: number;
+  dark: number;
+  light: number;
+}
+
+/** Team colours, by player number. */
+const PALETTES: Palette[] = [
+  { main: 0x3f86e0, dark: 0x24569c, light: 0x9cc4f7 },
+  { main: 0xd8483c, dark: 0x8f2a22, light: 0xf5a59c },
+];
+
+/** The palette the model currently being built should use. */
+let team = PALETTES[0];
 
 const materials = new Map<number, THREE.MeshLambertMaterial>();
 function mat(colour: number): THREE.MeshLambertMaterial {
@@ -105,16 +117,16 @@ function buildPioneer(): THREE.Group {
   // Tracks and chassis.
   g.add(box(1.7, 0.26, 0.26, RUBBER, 0, 0, -0.42));
   g.add(box(1.7, 0.26, 0.26, RUBBER, 0, 0, 0.42));
-  g.add(box(1.6, 0.2, 0.62, TEAM_DARK, 0, 0.16, 0));
+  g.add(box(1.6, 0.2, 0.62, team.dark, 0, 0.16, 0));
   // Cab at the front with a windscreen and a beacon.
-  g.add(box(0.44, 0.4, 0.7, TEAM, 0.55, 0.36, 0));
+  g.add(box(0.44, 0.4, 0.7, team.main, 0.55, 0.36, 0));
   g.add(box(0.06, 0.18, 0.58, GLASS, 0.77, 0.52, 0));
   g.add(box(0.1, 0.07, 0.1, HAZARD, 0.5, 0.76, 0.2));
   // The folded-up yard carried on the back.
   g.add(box(1.02, 0.44, 0.8, STEEL, -0.26, 0.36, 0));
-  g.add(box(0.9, 0.06, 0.62, TEAM, -0.26, 0.8, 0));
-  g.add(box(0.94, 0.05, 0.1, TEAM_LIGHT, -0.26, 0.8, -0.37));
-  g.add(box(0.94, 0.05, 0.1, TEAM_LIGHT, -0.26, 0.8, 0.37));
+  g.add(box(0.9, 0.06, 0.62, team.main, -0.26, 0.8, 0));
+  g.add(box(0.94, 0.05, 0.1, team.light, -0.26, 0.8, -0.37));
+  g.add(box(0.94, 0.05, 0.1, team.light, -0.26, 0.8, 0.37));
   // Crane boom strapped along the roof.
   g.add(box(1.1, 0.08, 0.1, HAZARD, -0.2, 0.86, 0));
   g.add(box(0.14, 0.14, 0.18, STEEL_DARK, -0.72, 0.86, 0));
@@ -131,18 +143,18 @@ function buildHarvester(): THREE.Group {
   // Tracks and chassis.
   g.add(box(1.36, 0.24, 0.24, RUBBER, -0.04, 0, -0.36));
   g.add(box(1.36, 0.24, 0.24, RUBBER, -0.04, 0, 0.36));
-  g.add(box(1.26, 0.18, 0.56, TEAM_DARK, -0.04, 0.14, 0));
+  g.add(box(1.26, 0.18, 0.56, team.dark, -0.04, 0.14, 0));
   // Open hopper at the back.
-  g.add(box(0.78, 0.36, 0.06, TEAM, -0.3, 0.32, -0.34));
-  g.add(box(0.78, 0.36, 0.06, TEAM, -0.3, 0.32, 0.34));
-  g.add(box(0.06, 0.36, 0.74, TEAM, -0.69, 0.32, 0));
-  g.add(box(0.06, 0.36, 0.74, TEAM_DARK, 0.09, 0.32, 0));
+  g.add(box(0.78, 0.36, 0.06, team.main, -0.3, 0.32, -0.34));
+  g.add(box(0.78, 0.36, 0.06, team.main, -0.3, 0.32, 0.34));
+  g.add(box(0.06, 0.36, 0.74, team.main, -0.69, 0.32, 0));
+  g.add(box(0.06, 0.36, 0.74, team.dark, 0.09, 0.32, 0));
   g.add(box(0.72, 0.04, 0.62, STEEL_DARK, -0.3, 0.32, 0));
   const cargo = box(0.7, 0.36, 0.6, 0xf0b429, -0.3, 0.34, 0);
   cargo.userData.cargo = true;
   g.add(cargo);
   // Cab.
-  g.add(box(0.3, 0.34, 0.5, TEAM_LIGHT, 0.28, 0.32, 0));
+  g.add(box(0.3, 0.34, 0.5, team.light, 0.28, 0.32, 0));
   g.add(box(0.05, 0.14, 0.4, GLASS, 0.44, 0.46, 0));
   // Cutting drum on arms at the front.
   g.add(box(0.3, 0.07, 0.07, STEEL, 0.58, 0.2, -0.3));
@@ -163,10 +175,10 @@ function buildRifleman(): THREE.Group {
   // Legs, body and helmeted head.
   g.add(box(0.07, 0.2, 0.07, STEEL_DARK, 0, 0, -0.05));
   g.add(box(0.07, 0.2, 0.07, STEEL_DARK, 0, 0, 0.05));
-  g.add(box(0.13, 0.22, 0.2, TEAM, 0, 0.2, 0));
-  g.add(box(0.12, 0.05, 0.08, TEAM_DARK, -0.09, 0.26, 0));
+  g.add(box(0.13, 0.22, 0.2, team.main, 0, 0.2, 0));
+  g.add(box(0.12, 0.05, 0.08, team.dark, -0.09, 0.26, 0));
   g.add(box(0.1, 0.1, 0.1, 0xe0b48c, 0, 0.42, 0));
-  g.add(box(0.13, 0.05, 0.13, TEAM_DARK, 0, 0.5, 0));
+  g.add(box(0.13, 0.05, 0.13, team.dark, 0, 0.5, 0));
   // Rifle held forward.
   g.add(box(0.3, 0.035, 0.035, RUBBER, 0.14, 0.3, 0.09));
   g.scale.setScalar(1.35);
@@ -177,11 +189,11 @@ function buildTank(): THREE.Group {
   const g = new THREE.Group();
   g.add(box(1.1, 0.22, 0.22, RUBBER, 0, 0, -0.32));
   g.add(box(1.1, 0.22, 0.22, RUBBER, 0, 0, 0.32));
-  g.add(box(1.0, 0.2, 0.5, TEAM_DARK, 0, 0.1, 0));
-  g.add(box(0.86, 0.1, 0.78, TEAM, -0.02, 0.24, 0));
+  g.add(box(1.0, 0.2, 0.5, team.dark, 0, 0.1, 0));
+  g.add(box(0.86, 0.1, 0.78, team.main, -0.02, 0.24, 0));
   // Turret and gun.
-  g.add(box(0.44, 0.2, 0.44, TEAM, -0.08, 0.34, 0));
-  g.add(box(0.46, 0.04, 0.46, TEAM_LIGHT, -0.08, 0.54, 0));
+  g.add(box(0.44, 0.2, 0.44, team.main, -0.08, 0.34, 0));
+  g.add(box(0.46, 0.04, 0.46, team.light, -0.08, 0.54, 0));
   g.add(box(0.62, 0.07, 0.07, STEEL_DARK, 0.42, 0.41, 0));
   g.add(box(0.1, 0.1, 0.1, STEEL_DARK, 0.7, 0.395, 0));
   g.scale.setScalar(1.1);
@@ -195,15 +207,15 @@ function buildConyard(): THREE.Group {
   stage(...hazardPad(1.05, 1.7, 0.8, 0.12, 0.42));
   // Main workshop.
   stage(
-    box(1.45, 1.25, 1.95, TEAM, -0.6, 0.12, -0.3),
+    box(1.45, 1.25, 1.95, team.main, -0.6, 0.12, -0.3),
     box(0.8, 0.7, 0.06, STEEL_DARK, -0.6, 0.12, 0.69),
-    box(1.49, 0.12, 1.99, TEAM_LIGHT, -0.6, 1.05, -0.3),
+    box(1.49, 0.12, 1.99, team.light, -0.6, 1.05, -0.3),
     box(0.2, 0.16, 0.06, GLASS, -1.05, 0.72, 0.69),
     box(0.2, 0.16, 0.06, GLASS, -0.15, 0.72, 0.69),
   );
-  stage(box(1.6, 0.1, 2.1, TEAM_DARK, -0.6, 1.37, -0.3), cyl(0.11, 0.13, 0.5, STEEL_DARK, -0.95, 1.45, -0.9));
+  stage(box(1.6, 0.1, 2.1, team.dark, -0.6, 1.37, -0.3), cyl(0.11, 0.13, 0.5, STEEL_DARK, -0.95, 1.45, -0.9));
   // Side annex.
-  stage(box(1.0, 0.62, 0.7, STEEL, -0.82, 0.12, 1.02), box(1.06, 0.06, 0.76, TEAM_DARK, -0.82, 0.74, 1.02));
+  stage(box(1.0, 0.62, 0.7, STEEL, -0.82, 0.12, 1.02), box(1.06, 0.06, 0.76, team.dark, -0.82, 0.74, 1.02));
   // Crane tower, then its arm.
   stage(box(0.22, 2.15, 0.22, HAZARD, 0.8, 0.12, -0.95), box(0.34, 0.22, 0.34, STEEL_DARK, 0.8, 2.27, -0.95));
   const arm = new THREE.Group();
@@ -221,11 +233,11 @@ function buildPowerPlant(): THREE.Group {
   stage(box(1.86, 0.1, 1.86, CONCRETE, 0, 0, 0));
   // Generator hall.
   stage(
-    box(0.8, 0.75, 1.5, TEAM, -0.42, 0.1, 0),
-    box(0.84, 0.1, 1.54, TEAM_LIGHT, -0.42, 0.55, 0),
+    box(0.8, 0.75, 1.5, team.main, -0.42, 0.1, 0),
+    box(0.84, 0.1, 1.54, team.light, -0.42, 0.55, 0),
     box(0.4, 0.4, 0.05, STEEL_DARK, -0.42, 0.1, 0.76),
   );
-  stage(box(0.9, 0.08, 1.6, TEAM_DARK, -0.42, 0.85, 0), box(0.3, 0.14, 0.3, STEEL, -0.42, 0.93, -0.4));
+  stage(box(0.9, 0.08, 1.6, team.dark, -0.42, 0.85, 0), box(0.3, 0.14, 0.3, STEEL, -0.42, 0.93, -0.4));
   // Two cooling towers.
   stage(cyl(0.25, 0.36, 1.05, STEEL_LIGHT, 0.45, 0.1, -0.42), cyl(0.27, 0.27, 0.06, HAZARD, 0.45, 1.1, -0.42));
   stage(cyl(0.25, 0.36, 1.05, STEEL_LIGHT, 0.45, 0.1, 0.42), cyl(0.27, 0.27, 0.06, HAZARD, 0.45, 1.1, 0.42));
@@ -239,11 +251,11 @@ function buildRefinery(): THREE.Group {
   stage(...hazardPad(1.2, 1.25, 0.72, 0.12, 0.7));
   // Processing hall.
   stage(
-    box(1.5, 1.05, 1.5, TEAM, -0.58, 0.12, -0.55),
-    box(1.54, 0.12, 1.54, TEAM_LIGHT, -0.58, 0.85, -0.55),
+    box(1.5, 1.05, 1.5, team.main, -0.58, 0.12, -0.55),
+    box(1.54, 0.12, 1.54, team.light, -0.58, 0.85, -0.55),
     box(0.7, 0.55, 0.05, STEEL_DARK, -0.58, 0.12, 0.21),
   );
-  stage(box(1.6, 0.1, 1.6, TEAM_DARK, -0.58, 1.17, -0.55), box(0.5, 0.3, 0.9, STEEL, -0.58, 1.27, -0.55));
+  stage(box(1.6, 0.1, 1.6, team.dark, -0.58, 1.17, -0.55), box(0.5, 0.3, 0.9, STEEL, -0.58, 1.27, -0.55));
   // Conveyor from the dock up into the hall.
   stage(box(0.9, 0.3, 0.3, STEEL, 0.4, 0.5, 0.1), box(0.25, 0.6, 0.25, STEEL_DARK, 0.75, 0.12, 0.1));
   // Storage silos.
@@ -267,15 +279,15 @@ function buildBarracks(): THREE.Group {
     box(0.34, 0.42, 0.05, STEEL_DARK, -0.35, 0.1, 0.21),
     box(0.22, 0.14, 0.05, GLASS, 0.3, 0.38, 0.21),
   );
-  stage(box(1.6, 0.14, 1.12, TEAM, 0, 0.65, -0.3), box(1.6, 0.14, 0.62, TEAM_LIGHT, 0, 0.79, -0.3));
+  stage(box(1.6, 0.14, 1.12, team.main, 0, 0.65, -0.3), box(1.6, 0.14, 0.62, team.light, 0, 0.79, -0.3));
   // Parade square and kit lockers.
   stage(
     box(1.5, 0.03, 0.5, STEEL_DARK, 0, 0.1, 0.6),
-    box(0.3, 0.26, 0.26, TEAM_DARK, 0.55, 0.1, 0.6),
-    box(0.26, 0.2, 0.22, TEAM_DARK, 0.2, 0.1, 0.62),
+    box(0.3, 0.26, 0.26, team.dark, 0.55, 0.1, 0.6),
+    box(0.26, 0.2, 0.22, team.dark, 0.2, 0.1, 0.62),
   );
   // Flagpole.
-  stage(box(0.04, 1.3, 0.04, STEEL_LIGHT, -0.7, 0.1, 0.65), box(0.34, 0.2, 0.03, TEAM, -0.51, 1.18, 0.65));
+  stage(box(0.04, 1.3, 0.04, STEEL_LIGHT, -0.7, 0.1, 0.65), box(0.34, 0.2, 0.03, team.main, -0.51, 1.18, 0.65));
   return finish(root);
 }
 
@@ -291,16 +303,16 @@ function buildFactory(): THREE.Group {
     box(1.5, 0.08, 0.08, HAZARD, 0.2, 0.97, 0.57),
   );
   stage(
-    box(2.6, 0.12, 2.0, TEAM, 0, 1.27, -0.4),
-    box(0.12, 0.1, 2.0, TEAM_LIGHT, -0.8, 1.39, -0.4),
-    box(0.12, 0.1, 2.0, TEAM_LIGHT, 0, 1.39, -0.4),
-    box(0.12, 0.1, 2.0, TEAM_LIGHT, 0.8, 1.39, -0.4),
+    box(2.6, 0.12, 2.0, team.main, 0, 1.27, -0.4),
+    box(0.12, 0.1, 2.0, team.light, -0.8, 1.39, -0.4),
+    box(0.12, 0.1, 2.0, team.light, 0, 1.39, -0.4),
+    box(0.12, 0.1, 2.0, team.light, 0.8, 1.39, -0.4),
   );
   // Control tower beside the door.
   stage(
-    box(0.5, 1.5, 0.5, TEAM_DARK, -1.05, 0.12, 0.85),
+    box(0.5, 1.5, 0.5, team.dark, -1.05, 0.12, 0.85),
     box(0.56, 0.24, 0.56, GLASS, -1.05, 1.62, 0.85),
-    box(0.6, 0.06, 0.6, TEAM, -1.05, 1.86, 0.85),
+    box(0.6, 0.06, 0.6, team.main, -1.05, 1.86, 0.85),
   );
   // Vents on the roof.
   stage(cyl(0.12, 0.12, 0.35, STEEL_DARK, 0.9, 1.39, -1.0), cyl(0.12, 0.12, 0.35, STEEL_DARK, 0.5, 1.39, -1.0));
@@ -322,26 +334,26 @@ const UNIT_BUILDERS: Record<UnitType, () => THREE.Group> = {
   tank: buildTank,
 };
 
-const unitTemplates = new Map<UnitType, THREE.Group>();
-const buildingTemplates = new Map<BuildingType, THREE.Group>();
+const templates = new Map<string, THREE.Group>();
 
-// Clones share geometry and materials, so extra copies are cheap.
-export function makeUnit(type: UnitType): THREE.Group {
-  let template = unitTemplates.get(type);
+/** Builds each model once per team, then hands out cheap copies that share its geometry. */
+function fromTemplate(key: string, owner: number, build: () => THREE.Group): THREE.Group {
+  const id = `${key}:${owner}`;
+  let template = templates.get(id);
   if (!template) {
-    template = UNIT_BUILDERS[type]();
-    unitTemplates.set(type, template);
+    team = PALETTES[owner % PALETTES.length];
+    template = build();
+    templates.set(id, template);
   }
   return template.clone();
 }
 
-export function makeBuilding(type: BuildingType): THREE.Group {
-  let template = buildingTemplates.get(type);
-  if (!template) {
-    template = BUILDERS[type]();
-    buildingTemplates.set(type, template);
-  }
-  return template.clone();
+export function makeUnit(type: UnitType, owner: number): THREE.Group {
+  return fromTemplate(type, owner, UNIT_BUILDERS[type]);
+}
+
+export function makeBuilding(type: BuildingType, owner: number): THREE.Group {
+  return fromTemplate(type, owner, BUILDERS[type]);
 }
 
 const ghostMaterial = new THREE.MeshBasicMaterial({
@@ -353,7 +365,7 @@ const ghostMaterial = new THREE.MeshBasicMaterial({
 
 /** A see-through copy of a building, shown while choosing where to place it. */
 export function makeGhost(type: BuildingType): THREE.Group {
-  const ghost = makeBuilding(type);
+  const ghost = makeBuilding(type, 0);
   ghost.traverse((o) => {
     if (o instanceof THREE.Mesh) {
       o.material = ghostMaterial;

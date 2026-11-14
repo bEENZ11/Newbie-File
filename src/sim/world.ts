@@ -11,8 +11,10 @@ import {
   cellIndex,
   inBounds,
   QUEUE_KINDS,
+  UNIT_DEFS,
   type Building,
   type BuildingType,
+  type Player,
   type Unit,
   type UnitQueue,
   type UnitType,
@@ -22,18 +24,21 @@ import {
 export const START_CX = 14;
 export const START_CY = 11;
 
-export function createWorld(seed: number): World {
+export interface Scenario {
+  /** Adds a guarded enemy outpost in the far corner, giving the player something to fight. */
+  outpost?: boolean;
+}
+
+const OUTPOST_X = 46;
+const OUTPOST_Y = 44;
+
+export function createWorld(seed: number, scenario: Scenario = {}): World {
   const world: World = {
     tick: 0,
+    winner: -1,
     rng: seed | 0,
     nextId: 1,
-    players: [
-      {
-        credits: STARTING_CREDITS,
-        production: null,
-        queues: { infantry: emptyQueue(), vehicle: emptyQueue() },
-      },
-    ],
+    players: [newPlayer(true), newPlayer(scenario.outpost === true)],
     units: [],
     buildings: [],
     ore: new Int32Array(MAP_W * MAP_H),
@@ -42,7 +47,47 @@ export function createWorld(seed: number): World {
   };
   scatterOre(world);
   spawnUnit(world, 'pioneer', 0, START_CX, START_CY);
+  if (scenario.outpost) addOutpost(world);
   return world;
+}
+
+function newPlayer(active: boolean): Player {
+  return {
+    active,
+    credits: STARTING_CREDITS,
+    production: null,
+    queues: { infantry: emptyQueue(), vehicle: emptyQueue() },
+  };
+}
+
+/** A small finished enemy base with a few guards. It defends itself but builds nothing. */
+function addOutpost(world: World): void {
+  // Clear any ore from the site first.
+  for (let y = OUTPOST_Y - 4; y < OUTPOST_Y + 10; y++) {
+    for (let x = OUTPOST_X - 4; x < OUTPOST_X + 10; x++) {
+      if (inBounds(x, y)) world.ore[cellIndex(x, y)] = 0;
+    }
+  }
+  const layout: [BuildingType, number, number][] = [
+    ['conyard', 0, 0],
+    ['power', 4, 0],
+    ['barracks', 4, 3],
+    ['power', 0, 4],
+  ];
+  for (const [type, dx, dy] of layout) {
+    const b = addBuilding(world, type, 1, OUTPOST_X + dx, OUTPOST_Y + dy);
+    b.progress = b.total;
+  }
+  const guards: [UnitType, number, number][] = [
+    ['rifleman', -2, 1],
+    ['rifleman', -2, 3],
+    ['rifleman', 1, -2],
+    ['rifleman', 3, -2],
+    ['rifleman', 2, 6],
+    ['tank', -2, -2],
+    ['tank', 7, 5],
+  ];
+  for (const [type, dx, dy] of guards) spawnUnit(world, type, 1, OUTPOST_X + dx, OUTPOST_Y + dy);
 }
 
 const emptyQueue = (): UnitQueue => ({ items: [], progress: 0, paid: 0, held: false, speedAcc: 0 });
@@ -91,6 +136,11 @@ export function spawnUnit(world: World, type: UnitType, owner: number, cx: numbe
     dest: -1,
     wait: 0,
     pendingDeploy: false,
+    hp: UNIT_DEFS[type].hp,
+    attack: 0,
+    chase: false,
+    cooldown: 0,
+    chaseTimer: 0,
     job: type === 'harvester' ? 'seek' : 'none',
     cargo: 0,
     target: -1,
@@ -151,6 +201,7 @@ export function addBuilding(
     h: def.h,
     progress: 0,
     total: def.buildTicks,
+    hp: def.hp,
     selling: false,
     rally: -1,
   };
@@ -184,6 +235,7 @@ export function hashWorld(world: World): number {
     h = Math.imul(h ^ ((n >>> 24) & 0xff), 0x01000193);
   };
   mix(world.tick);
+  mix(world.winner);
   mix(world.rng);
   mix(world.nextId);
   for (const p of world.players) {
@@ -219,6 +271,11 @@ export function hashWorld(world: World): number {
     mix(u.dest);
     mix(u.wait);
     mix(u.pendingDeploy ? 1 : 0);
+    mix(u.hp);
+    mix(u.attack);
+    mix(u.chase ? 1 : 0);
+    mix(u.cooldown);
+    mix(u.chaseTimer);
     mix(HARVEST_JOBS.indexOf(u.job));
     mix(u.cargo);
     mix(u.target);
@@ -235,6 +292,7 @@ export function hashWorld(world: World): number {
     mix(b.cx);
     mix(b.cy);
     mix(b.progress);
+    mix(b.hp);
     mix(b.selling ? 1 : 0);
     mix(b.rally);
   }

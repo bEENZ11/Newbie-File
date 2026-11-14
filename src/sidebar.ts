@@ -14,6 +14,15 @@ import {
 } from './sim/types';
 import { LOCAL_PLAYER, type UiState } from './ui';
 
+/** Short names, so a locked button can say what it needs in one line. */
+const SHORT: Record<BuildingType, string> = {
+  conyard: 'Yard',
+  power: 'Power',
+  refinery: 'Refinery',
+  barracks: 'Barracks',
+  factory: 'Factory',
+};
+
 interface Entry {
   button: HTMLButtonElement;
   status: HTMLElement;
@@ -133,7 +142,7 @@ export class Sidebar {
       }
       if (!canProduce(sim.world, LOCAL_PLAYER, type)) {
         const missing = missingFor(sim.world, LOCAL_PLAYER, type);
-        const label = missing.length ? `Needs ${BUILDING_DEFS[missing[0]].name}` : '';
+        const label = missing.length ? `Needs ${SHORT[missing[0]]}` : '';
         return { state: 'locked', label, progress: 0, count: 0, placing };
       }
       if (prod) return { state: 'busy', label: '', progress: 0, count: 0, placing };
@@ -165,7 +174,7 @@ export class Sidebar {
       if (count > 0) return { state: 'queued', label: 'Queued', progress: 0, count, placing: false };
       if (!canTrain(sim.world, LOCAL_PLAYER, type)) {
         const missing = missingForUnit(sim.world, LOCAL_PLAYER, type);
-        const label = missing.length ? `Needs ${BUILDING_DEFS[missing[0]].name}` : '';
+        const label = missing.length ? `Needs ${SHORT[missing[0]]}` : '';
         return { state: 'locked', label, progress: 0, count: 0, placing: false };
       }
       return { state: 'idle', label: seconds(def.produceTicks), progress: 0, count: 0, placing: false };

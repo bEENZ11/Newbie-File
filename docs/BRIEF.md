@@ -122,6 +122,7 @@ Total supply is compared with total demand. If demand is higher, the power bar t
 | Select several units | Left-click and drag a box |
 | Add to selection | Shift and left-click |
 | Move, or harvest if ore is clicked | Right-click |
+| Attack | Right-click an enemy unit or building |
 | Deselect, or cancel placement | Right-click on empty ground with nothing to order, or Escape |
 | Save a control group | Ctrl or Shift, and a number key |
 | Recall a control group | The number key. Press twice to jump the camera to it |
@@ -176,6 +177,19 @@ Combat, damage and repair, fog of war, real maps and terrain, a map editor, an A
 ## Using the open-source classics as reference
 
 We read the published source of the classic games and OpenRA to understand how problems were solved, then write our own implementation. We don't copy or translate code, and we don't use any of their art, audio, maps, names or balance tables. This keeps our code free of GPL obligations and the game clearly our own.
+
+## Phase 2 progress: combat
+
+Combat is the first part of phase 2 to be built.
+
+- **Health.** Every unit and building has health, shown as a bar when it is selected or damaged. At zero it is destroyed and its ground is freed.
+- **Weapons.** Riflemen and Light Tanks are armed. Rifles are strong against infantry and weak against vehicles and buildings, and tank cannons are the reverse. Harvesters and the Pioneer are unarmed.
+- **Orders.** With armed units selected, right-clicking an enemy orders an attack. They close to weapon range, follow a target that moves, and stop when it is destroyed. A move order cancels an attack.
+- **Instincts.** An idle unit fires at any enemy that comes into range without leaving its post. If something out of reach shoots at it, it goes after the attacker, and idle allies nearby join in.
+- **The outpost.** Until there is an AI opponent, each game starts with a red enemy outpost in the south-east: a few buildings and guards that defend themselves but build nothing.
+- **Winning.** A side is beaten when it has no buildings left and no Pioneer to start again.
+
+Still to come in phase 2: maps and terrain, fog of war, defensive buildings, a minimap, repairing buildings and sound.
 
 ## What the classics confirmed
 

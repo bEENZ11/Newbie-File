@@ -1,7 +1,7 @@
 import { SIN_PITCH, type Renderer } from '../render/renderer';
 import type { Sim } from '../sim/sim';
 import { checkPlacement } from '../sim/production';
-import { BUILDING_DEFS, MAP_H, MAP_W, SUB, type Unit } from '../sim/types';
+import { BUILDING_DEFS, MAP_H, MAP_W, SUB, UNIT_DEFS, type Unit } from '../sim/types';
 import { LOCAL_PLAYER, ZOOM_MAX, ZOOM_MIN, placementOrigin, type UiState } from '../ui';
 
 const DRAG_THRESHOLD = 5;
@@ -81,10 +81,13 @@ export class Input {
     return this.renderer.worldToScreen(this.ui, u.x / SUB, UNIT_PICK_HEIGHT, u.y / SUB);
   }
 
-  private unitAt(sx: number, sy: number): Unit | null {
+  /** The unit nearest a screen position, optionally only our own or only the enemy's. */
+  private unitAt(sx: number, sy: number, side: 'any' | 'own' | 'enemy' = 'any'): Unit | null {
     let best: Unit | null = null;
     let bestD = (UNIT_PICK_RADIUS * this.ui.zoom) ** 2;
     for (const u of this.sim.world.units) {
+      if (side === 'own' && u.owner !== LOCAL_PLAYER) continue;
+      if (side === 'enemy' && u.owner === LOCAL_PLAYER) continue;
       const p = this.unitScreenPos(u);
       const d = (p.x - sx) ** 2 + (p.y - sy) ** 2;
       if (d <= bestD) {
@@ -157,7 +160,7 @@ export class Input {
       return;
     }
 
-    const unit = this.unitAt(p.x, p.y);
+    const unit = this.unitAt(p.x, p.y, 'own');
     if (unit) {
       ui.selectedUnits.add(unit.id);
       ui.selectedBuilding = null;
@@ -193,6 +196,24 @@ export class Input {
     // which is how a harvester is sent to a refinery.
     const picked = this.renderer.pickBuilding(ui, sx, sy);
     const building = this.sim.world.buildings.find((b) => b.id === picked);
+
+    // Right-clicking something of the enemy's is an order to attack it.
+    const foe = this.unitAt(sx, sy, 'enemy');
+    const hostile = foe ?? (building && building.owner !== LOCAL_PLAYER ? building : null);
+    const armed = this.sim.world.units.filter(
+      (u) => ui.selectedUnits.has(u.id) && UNIT_DEFS[u.type].weapon,
+    );
+    if (hostile && armed.length > 0) {
+      this.sim.issue({
+        type: 'attack',
+        player: LOCAL_PLAYER,
+        unitIds: armed.map((u) => u.id),
+        targetId: hostile.id,
+      });
+      const at = this.renderer.screenToGround(ui, sx, sy);
+      ui.markers.push({ x: at.x, z: at.z, t: performance.now(), hostile: true });
+      return;
+    }
     const hit = this.renderer.screenToGround(ui, sx, sy);
     const cx = building ? building.cx : Math.floor(hit.x);
     const cy = building ? building.cy : Math.floor(hit.z);
@@ -230,7 +251,7 @@ export class Input {
     const p = this.screenPos(e);
     const unit = this.unitAt(p.x, p.y);
     if (this.ui.placing || this.ui.sellMode) return;
-    if (unit?.type === 'pioneer') {
+    if (unit?.type === 'pioneer' && unit.owner === LOCAL_PLAYER) {
       this.sim.issue({ type: 'deploy', player: LOCAL_PLAYER, unitId: unit.id });
     }
   }

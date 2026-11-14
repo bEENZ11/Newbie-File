@@ -1,5 +1,5 @@
 import { stepWorld } from './step';
-import { createWorld, hashWorld } from './world';
+import { createWorld, hashWorld, type Scenario } from './world';
 import type { Command, SimEvent, World } from './types';
 
 export interface LoggedCommand {
@@ -20,8 +20,11 @@ export class Sim {
   events: SimEvent[] = [];
   private pending: Command[] = [];
 
-  constructor(readonly seed: number) {
-    this.world = createWorld(seed);
+  constructor(
+    readonly seed: number,
+    readonly scenario: Scenario = {},
+  ) {
+    this.world = createWorld(seed, scenario);
   }
 
   /** Queues a command to take effect on the next tick. */
@@ -42,8 +45,13 @@ export class Sim {
   }
 
   /** Rebuilds a game from its seed and command log. */
-  static replay(seed: number, log: readonly LoggedCommand[], ticks: number): Sim {
-    const sim = new Sim(seed);
+  static replay(
+    seed: number,
+    log: readonly LoggedCommand[],
+    ticks: number,
+    scenario: Scenario = {},
+  ): Sim {
+    const sim = new Sim(seed, scenario);
     let next = 0;
     while (sim.world.tick < ticks) {
       while (next < log.length && log[next].tick === sim.world.tick) sim.issue(log[next++].cmd);

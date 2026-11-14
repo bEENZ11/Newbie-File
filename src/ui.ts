@@ -30,7 +30,7 @@ export interface UiState {
   /** Saved control groups, by number key. */
   groups: Map<number, number[]>;
   /** Move order markers, in cells. */
-  markers: { x: number; z: number; t: number }[];
+  markers: { x: number; z: number; t: number; hostile?: boolean }[];
   /** Red flashes where a deployment was refused, in cells. */
   flashes: { cx: number; cy: number; w: number; h: number; t: number }[];
   mouseX: number;

@@ -8,12 +8,16 @@ import {
   MAP_W,
   SUB,
   cellIndex,
+  UNIT_DEFS,
   type BuildingType,
+  type SimEvent,
   type UnitType,
   type World,
 } from '../sim/types';
 import { LOCAL_PLAYER, placementOrigin, type UiState } from '../ui';
 import { rallyPoint } from '../sim/training';
+import { Effects } from './effects';
+import { HealthBars } from './healthbars';
 import { frameGeometry, makeBuilding, makeGhost, makeRallyFlag, makeUnit } from './models';
 
 // The view is 3D with a fixed camera: looking north, tilted down at the ground.
@@ -36,7 +40,7 @@ function noise(x: number, y: number, salt: number): number {
 }
 
 /** Selection ring size for each kind of unit, as a share of the largest. */
-const RING_SIZE: Record<UnitType, number> = { pioneer: 1, harvester: 0.8, tank: 0.7, rifleman: 0.34 };
+const RING_SIZE: Record<UnitType, number> = { pioneer: 0.85, harvester: 0.62, tank: 0.52, rifleman: 0.28 };
 
 /** How many nuggets to draw on a cell, so a field visibly thins as it is mined. */
 function oreNuggets(amount: number): number {
@@ -87,6 +91,8 @@ export class Renderer {
   private rallyFlag = makeRallyFlag();
   private markerPool: THREE.Mesh[] = [];
   private lastDraw = 0;
+  private effects = new Effects(this.scene);
+  private healthBars = new HealthBars(this.scene);
 
   constructor(private canvas: HTMLCanvasElement) {
     this.gl = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -257,6 +263,8 @@ export class Renderer {
     this.syncUnits(world, ui, alpha, dt);
     this.syncBuildings(world, ui, now);
     this.syncOverlays(world, ui, now);
+    this.syncHealth(world, ui, alpha);
+    this.effects.update(now);
 
     this.gl.render(this.scene, this.camera);
   }
@@ -317,7 +325,7 @@ export class Renderer {
       const target = (-u.facing * Math.PI) / 4;
       let view = this.unitViews.get(u.id);
       if (!view) {
-        const obj = makeUnit(u.type);
+        const obj = makeUnit(u.type, u.owner);
         let cargo: THREE.Object3D | null = null;
         let drum: THREE.Object3D | null = null;
         obj.traverse((o) => {
@@ -365,7 +373,7 @@ export class Renderer {
       alive.add(b.id);
       let view = this.buildingViews.get(b.id);
       if (!view) {
-        const obj = makeBuilding(b.type);
+        const obj = makeBuilding(b.type, b.owner);
         obj.position.set(b.cx + b.w / 2, 0, b.cy + b.h / 2);
         const stages: THREE.Object3D[] = [];
         let arm: THREE.Object3D | null = null;
@@ -397,6 +405,36 @@ export class Renderer {
       this.scene.remove(view.obj);
       this.buildingViews.delete(id);
     }
+  }
+
+  /** Passes a simulation event on to the battle effects. */
+  onEvent(ev: SimEvent, now: number): void {
+    this.effects.onEvent(ev, now);
+  }
+
+  /** Health bars for anything selected or damaged. */
+  private syncHealth(world: World, ui: UiState, alpha: number): void {
+    this.healthBars.begin();
+    for (const u of world.units) {
+      const max = UNIT_DEFS[u.type].hp;
+      if (u.hp >= max && !ui.selectedUnits.has(u.id)) continue;
+      const size = RING_SIZE[u.type];
+      this.healthBars.show(
+        u.id,
+        (u.prevX + (u.x - u.prevX) * alpha) / SUB,
+        0.7 + size * 0.9,
+        (u.prevY + (u.y - u.prevY) * alpha) / SUB,
+        u.hp / max,
+        0.4 + size * 0.9,
+        this.camera,
+      );
+    }
+    for (const b of world.buildings) {
+      const max = BUILDING_DEFS[b.type].hp;
+      if (b.hp >= max && ui.selectedBuilding !== b.id) continue;
+      this.healthBars.show(b.id, b.cx + b.w / 2, 2.5, b.cy + b.h / 2, b.hp / max, b.w * 0.8, this.camera);
+    }
+    this.healthBars.end();
   }
 
   /** The see-through building and coloured footprint that follow the mouse. */
@@ -478,6 +516,7 @@ export class Renderer {
       const r = 0.15 + (1 - p) * 0.4;
       mesh.position.set(m.x, 0.04, m.z);
       mesh.scale.set(r, 1, r);
+      (mesh.material as THREE.MeshBasicMaterial).color.setHex(m.hostile ? 0xff5a50 : 0x7dff8e);
       (mesh.material as THREE.MeshBasicMaterial).opacity = 1 - p;
     });
   }

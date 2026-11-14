@@ -67,8 +67,26 @@ export const BUILDING_TYPES: readonly BuildingType[] = [
   'factory',
 ];
 
+/** What a target is made of, which decides how much each weapon hurts it. */
+export type ArmourClass = 'infantry' | 'vehicle' | 'building';
+
+export interface WeaponDef {
+  /** Reach in cells. */
+  range: number;
+  damage: number;
+  /** Ticks between shots. */
+  cooldown: number;
+  /** Only affects how the shot is drawn. */
+  kind: 'bullet' | 'shell';
+  /** Percentage of damage dealt to each armour class. */
+  versus: Record<ArmourClass, number>;
+}
+
 export interface UnitDef {
   name: string;
+  hp: number;
+  armour: ArmourClass;
+  weapon: WeaponDef | null;
   /** Sub-cell units moved per tick. */
   speed: number;
   cost: number;
@@ -82,6 +100,7 @@ export interface UnitDef {
 
 export interface BuildingDef {
   name: string;
+  hp: number;
   w: number;
   h: number;
   cost: number;
@@ -96,23 +115,70 @@ export interface BuildingDef {
 }
 
 export const UNIT_DEFS: Record<UnitType, UnitDef> = {
-  pioneer: { name: 'Pioneer', speed: 32, cost: 2500, produceTicks: 0, queue: null, requires: [] },
+  pioneer: {
+    name: 'Pioneer',
+    hp: 600,
+    armour: 'vehicle',
+    weapon: null,
+    speed: 32,
+    cost: 2500,
+    produceTicks: 0,
+    queue: null,
+    requires: [],
+  },
   harvester: {
     name: 'Harvester',
+    hp: 450,
+    armour: 'vehicle',
+    weapon: null,
     speed: 40,
     cost: 1100,
     produceTicks: 360,
     queue: 'vehicle',
     requires: ['refinery'],
   },
-  rifleman: { name: 'Rifleman', speed: 22, cost: 80, produceTicks: 80, queue: 'infantry', requires: [] },
-  tank: { name: 'Light Tank', speed: 44, cost: 600, produceTicks: 240, queue: 'vehicle', requires: [] },
+  // Rifles cut down infantry but barely scratch armour. Cannons are the reverse.
+  rifleman: {
+    name: 'Rifleman',
+    hp: 50,
+    armour: 'infantry',
+    weapon: {
+      range: 4,
+      damage: 8,
+      cooldown: 12,
+      kind: 'bullet',
+      versus: { infantry: 100, vehicle: 30, building: 25 },
+    },
+    speed: 22,
+    cost: 80,
+    produceTicks: 80,
+    queue: 'infantry',
+    requires: [],
+  },
+  tank: {
+    name: 'Light Tank',
+    hp: 300,
+    armour: 'vehicle',
+    weapon: {
+      range: 5,
+      damage: 30,
+      cooldown: 40,
+      kind: 'shell',
+      versus: { infantry: 40, vehicle: 100, building: 80 },
+    },
+    speed: 44,
+    cost: 600,
+    produceTicks: 240,
+    queue: 'vehicle',
+    requires: [],
+  },
 };
 
 // Placeholder numbers of our own, to be tuned once the whole loop is playable.
 export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
   conyard: {
     name: 'Construction Yard',
+    hp: 1500,
     w: 3,
     h: 3,
     cost: 2500,
@@ -123,6 +189,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
   },
   power: {
     name: 'Power Plant',
+    hp: 500,
     w: 2,
     h: 2,
     cost: 250,
@@ -133,6 +200,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
   },
   refinery: {
     name: 'Ore Refinery',
+    hp: 900,
     w: 3,
     h: 3,
     cost: 1500,
@@ -143,6 +211,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
   },
   barracks: {
     name: 'Barracks',
+    hp: 600,
     w: 2,
     h: 2,
     cost: 400,
@@ -153,6 +222,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
   },
   factory: {
     name: 'War Factory',
+    hp: 1000,
     w: 3,
     h: 3,
     cost: 1800,
@@ -185,6 +255,15 @@ export interface Unit {
   /** Ticks spent waiting for another unit to move out of the way. */
   wait: number;
   pendingDeploy: boolean;
+  hp: number;
+  /** The id of the unit or building it is attacking, or 0. */
+  attack: number;
+  /** True when it should follow its target. False when it only fires from where it stands. */
+  chase: boolean;
+  /** Ticks until it can fire again. */
+  cooldown: number;
+  /** Ticks until it next re-plans its route to a moving target. */
+  chaseTimer: number;
   // Harvesters only.
   job: HarvestJob;
   cargo: number;
@@ -209,6 +288,7 @@ export interface Building {
   /** Counts up to total while building up, and back down while being sold. */
   progress: number;
   total: number;
+  hp: number;
   selling: boolean;
   /** Where new units gather, as a cell index, or -1 for just outside the door. */
   rally: number;
@@ -238,6 +318,8 @@ export interface UnitQueue {
 }
 
 export interface Player {
+  /** True if this player started the game with anything on the map. */
+  active: boolean;
   credits: number;
   production: Production | null;
   queues: Record<QueueKind, UnitQueue>;
@@ -245,6 +327,8 @@ export interface Player {
 
 export interface World {
   tick: number;
+  /** The last player standing once the game is decided, or -1. */
+  winner: number;
   rng: number;
   nextId: number;
   players: Player[];
@@ -269,7 +353,8 @@ export type Command =
   | { type: 'sell'; player: number; buildingId: number }
   | { type: 'train'; player: number; unit: UnitType }
   | { type: 'untrain'; player: number; unit: UnitType }
-  | { type: 'rally'; player: number; buildingId: number; cx: number; cy: number };
+  | { type: 'rally'; player: number; buildingId: number; cx: number; cy: number }
+  | { type: 'attack'; player: number; unitIds: number[]; targetId: number };
 
 /** One-off notifications for the UI. Never read back by the simulation. */
 export type SimEvent =
@@ -279,7 +364,12 @@ export type SimEvent =
   | { type: 'placed'; player: number; buildingId: number }
   | { type: 'placeRefused'; player: number; cx: number; cy: number; w: number; h: number }
   | { type: 'sold'; player: number; buildingId: number; refund: number }
-  | { type: 'unitReady'; player: number; unitId: number; unit: UnitType };
+  | { type: 'unitReady'; player: number; unitId: number; unit: UnitType }
+  // Positions here are in sub-cell units, for drawing the shot.
+  | { type: 'shot'; kind: 'bullet' | 'shell'; fromX: number; fromY: number; toX: number; toY: number }
+  | { type: 'unitDied'; unitId: number; unit: UnitType; x: number; y: number }
+  | { type: 'buildingDestroyed'; buildingId: number; cx: number; cy: number; w: number; h: number }
+  | { type: 'gameOver'; winner: number };
 
 export const cellIndex = (cx: number, cy: number): number => cy * MAP_W + cx;
 export const inBounds = (cx: number, cy: number): boolean =>

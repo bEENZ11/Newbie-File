@@ -14,7 +14,7 @@ import {
 } from './types';
 
 // Facing lookup indexed by [sign(dy) + 1][sign(dx) + 1].
-const FACING = [
+export const FACING = [
   [5, 6, 7],
   [4, 0, 0],
   [3, 2, 1],
