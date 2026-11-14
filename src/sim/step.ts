@@ -1,4 +1,5 @@
 import { orderAttack, tickCombat } from './combat';
+import { VISION_INTERVAL, updateVision } from './vision';
 import { orderHarvester, tickHarvesters } from './harvest';
 import { haltUnit, isSettled, moveUnit, setDestination } from './movement';
 import {
@@ -45,6 +46,7 @@ export function stepWorld(world: World, commands: readonly Command[], events: Si
   tickTraining(world, events);
   tickBuildings(world, events);
 
+  if (world.tick % VISION_INTERVAL === 0) updateVision(world);
   world.tick++;
 }
 

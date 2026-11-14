@@ -88,6 +88,8 @@ export class Input {
     for (const u of this.sim.world.units) {
       if (side === 'own' && u.owner !== LOCAL_PLAYER) continue;
       if (side === 'enemy' && u.owner === LOCAL_PLAYER) continue;
+      // Enemies hidden by the fog cannot be clicked on.
+      if (u.owner !== LOCAL_PLAYER && !this.sim.world.vision[LOCAL_PLAYER].visible[u.cell]) continue;
       const p = this.unitScreenPos(u);
       const d = (p.x - sx) ** 2 + (p.y - sy) ** 2;
       if (d <= bestD) {

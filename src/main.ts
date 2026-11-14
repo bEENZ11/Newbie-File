@@ -1,4 +1,5 @@
 import { Input } from './input/input';
+import { Minimap } from './minimap';
 import { Renderer } from './render/renderer';
 import { Sidebar } from './sidebar';
 import { checkPlacement, powerOf } from './sim/production';
@@ -24,6 +25,9 @@ const ui = createUi();
 const renderer = new Renderer(canvas);
 const input = new Input(canvas, sim, ui, renderer);
 const sidebar = new Sidebar(document.getElementById('sidebar')!, sim, ui);
+const minimap = new Minimap(document.getElementById('minimap') as HTMLCanvasElement, sim, ui, () =>
+  input.clampCamera(),
+);
 
 function resize(): void {
   renderer.resize(ui);
@@ -111,6 +115,7 @@ function currentHint(): string {
 
 function updateHud(): void {
   sidebar.update();
+  minimap.draw();
 
   const hint = currentHint();
   if (hintEl.textContent !== hint) hintEl.textContent = hint;

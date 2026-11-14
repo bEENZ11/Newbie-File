@@ -21,6 +21,8 @@ export const GATHER_RATE = 5;
 export const UNLOAD_RATE = 10;
 /** Ticks a unit waits behind another before trying a way round. */
 export const BLOCKED_PATIENCE = 8;
+/** How far a building can see beyond its own walls, in cells. */
+export const BUILDING_SIGHT = 5;
 
 export type UnitType = 'pioneer' | 'harvester' | 'rifleman' | 'tank';
 export const UNIT_TYPES: readonly UnitType[] = ['pioneer', 'harvester', 'rifleman', 'tank'];
@@ -84,6 +86,8 @@ export interface WeaponDef {
 
 export interface UnitDef {
   name: string;
+  /** How far it can see, in cells. */
+  sight: number;
   hp: number;
   armour: ArmourClass;
   weapon: WeaponDef | null;
@@ -117,6 +121,7 @@ export interface BuildingDef {
 export const UNIT_DEFS: Record<UnitType, UnitDef> = {
   pioneer: {
     name: 'Pioneer',
+    sight: 5,
     hp: 600,
     armour: 'vehicle',
     weapon: null,
@@ -128,6 +133,7 @@ export const UNIT_DEFS: Record<UnitType, UnitDef> = {
   },
   harvester: {
     name: 'Harvester',
+    sight: 4,
     hp: 450,
     armour: 'vehicle',
     weapon: null,
@@ -140,6 +146,7 @@ export const UNIT_DEFS: Record<UnitType, UnitDef> = {
   // Rifles cut down infantry but barely scratch armour. Cannons are the reverse.
   rifleman: {
     name: 'Rifleman',
+    sight: 5,
     hp: 50,
     armour: 'infantry',
     weapon: {
@@ -157,6 +164,7 @@ export const UNIT_DEFS: Record<UnitType, UnitDef> = {
   },
   tank: {
     name: 'Light Tank',
+    sight: 6,
     hp: 300,
     armour: 'vehicle',
     weapon: {
@@ -340,6 +348,8 @@ export interface World {
   blocked: Uint8Array;
   /** The id of the unit holding each cell, or 0. Derived from units. */
   occupied: Int32Array;
+  /** Per player: cells in view right now, and cells seen at any time. */
+  vision: { visible: Uint8Array; explored: Uint8Array }[];
 }
 
 // Every command names the player giving it, ready for multiplayer.

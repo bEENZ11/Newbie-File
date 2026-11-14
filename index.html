@@ -49,6 +49,17 @@
         gap: 12px;
         overflow-y: auto;
       }
+      #minimap {
+        width: 192px;
+        height: 192px;
+        flex: none;
+        align-self: center;
+        background: #000;
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        image-rendering: pixelated;
+        cursor: pointer;
+      }
       .label {
         font-size: 11px;
         letter-spacing: 0.12em;
@@ -56,7 +67,7 @@
         color: var(--muted);
       }
       #credits {
-        font-size: 26px;
+        font-size: 22px;
         font-weight: 650;
         font-variant-numeric: tabular-nums;
         color: var(--gold);
@@ -115,7 +126,7 @@
       }
       .build {
         position: relative;
-        height: 74px;
+        height: 62px;
         padding: 7px 6px 5px;
         background: #232a31;
         border: 1px solid var(--line);
@@ -274,6 +285,7 @@
   <body>
     <canvas id="game"></canvas>
     <aside id="sidebar">
+      <canvas id="minimap" width="192" height="192"></canvas>
       <div>
         <div class="label">Credits</div>
         <div id="credits">0</div>

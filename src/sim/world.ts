@@ -1,4 +1,5 @@
 import { randInt } from './rng';
+import { updateVision } from './vision';
 import {
   BUILDING_DEFS,
   BUILDING_TYPES,
@@ -44,10 +45,15 @@ export function createWorld(seed: number, scenario: Scenario = {}): World {
     ore: new Int32Array(MAP_W * MAP_H),
     blocked: new Uint8Array(MAP_W * MAP_H),
     occupied: new Int32Array(MAP_W * MAP_H),
+    vision: [0, 1].map(() => ({
+      visible: new Uint8Array(MAP_W * MAP_H),
+      explored: new Uint8Array(MAP_W * MAP_H),
+    })),
   };
   scatterOre(world);
   spawnUnit(world, 'pioneer', 0, START_CX, START_CY);
   if (scenario.outpost) addOutpost(world);
+  updateVision(world);
   return world;
 }
 

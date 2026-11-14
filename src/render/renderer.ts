@@ -9,6 +9,7 @@ import {
   SUB,
   cellIndex,
   UNIT_DEFS,
+  type Building,
   type BuildingType,
   type SimEvent,
   type UnitType,
@@ -37,6 +38,14 @@ function noise(x: number, y: number, salt: number): number {
   let h = Math.imul(x * 374761393 + y * 668265263 + salt * 2246822519, 3266489917);
   h = Math.imul(h ^ (h >>> 15), 2246822519);
   return ((h ^ (h >>> 13)) >>> 0) / 4294967296;
+}
+
+/** True if any cell under a building is set in the given vision layer. */
+function footprintSeen(layer: Uint8Array, b: Building): boolean {
+  for (let y = b.cy; y < b.cy + b.h; y++) {
+    for (let x = b.cx; x < b.cx + b.w; x++) if (layer[cellIndex(x, y)]) return true;
+  }
+  return false;
 }
 
 /** Selection ring size for each kind of unit, as a share of the largest. */
@@ -91,6 +100,9 @@ export class Renderer {
   private rallyFlag = makeRallyFlag();
   private markerPool: THREE.Mesh[] = [];
   private lastDraw = 0;
+  private fogData = new Uint8Array(MAP_W * MAP_H * 4);
+  private fogTexture!: THREE.DataTexture;
+  private fogTick = -1;
   private effects = new Effects(this.scene);
   private healthBars = new HealthBars(this.scene);
 
@@ -115,6 +127,18 @@ export class Renderer {
     this.scene.add(this.sun, this.sun.target);
 
     this.scene.add(this.makeTerrain());
+
+    // Fog of war: one texel per cell, drawn over everything on the ground.
+    this.fogTexture = new THREE.DataTexture(this.fogData, MAP_W, MAP_H, THREE.RGBAFormat);
+    this.fogTexture.magFilter = THREE.LinearFilter;
+    this.fogTexture.minFilter = THREE.LinearFilter;
+    const fog = new THREE.Mesh(
+      new THREE.PlaneGeometry(MAP_W, MAP_H).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ map: this.fogTexture, transparent: true, depthTest: false, depthWrite: false }),
+    );
+    fog.position.set(MAP_W / 2, 0.02, MAP_H / 2);
+    fog.renderOrder = 3;
+    this.scene.add(fog);
 
     const flat = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
     this.preview = new THREE.Mesh(
@@ -152,6 +176,8 @@ export class Renderer {
         new THREE.MeshBasicMaterial({ color: 0x7dff8e, transparent: true, depthTest: false }),
       );
       flash.visible = marker.visible = false;
+      // Above the fog, so an order into the unknown still shows where it went.
+      marker.renderOrder = 4;
       this.flashPool.push(flash);
       this.markerPool.push(marker);
       this.scene.add(flash, marker);
@@ -241,6 +267,7 @@ export class Renderer {
     let best: number | null = null;
     let bestDist = Infinity;
     for (const [id, view] of this.buildingViews) {
+      if (!view.obj.visible) continue;
       const hit = this.raycaster.intersectObject(view.obj, true)[0];
       if (hit && hit.distance < bestDist) {
         best = id;
@@ -259,6 +286,7 @@ export class Renderer {
     this.sun.target.position.set(ui.camX, 0, ui.camZ);
     this.sun.target.updateMatrixWorld();
 
+    this.syncFog(world);
     this.syncOre(world);
     this.syncUnits(world, ui, alpha, dt);
     this.syncBuildings(world, ui, now);
@@ -318,6 +346,7 @@ export class Renderer {
   }
 
   private syncUnits(world: World, ui: UiState, alpha: number, dt: number): void {
+    const vision = world.vision[LOCAL_PLAYER];
     const alive = new Set<number>();
     for (const u of world.units) {
       alive.add(u.id);
@@ -347,6 +376,8 @@ export class Renderer {
       const turn = TURN_RATE * dt;
       view.angle += Math.abs(diff) <= turn ? diff : Math.sign(diff) * turn;
       view.obj.rotation.y = view.angle;
+      // Enemy units only show while one of ours can see them.
+      view.obj.visible = u.owner === LOCAL_PLAYER || vision.visible[u.cell] === 1;
       view.obj.position.set(
         (u.prevX + (u.x - u.prevX) * alpha) / SUB,
         0,
@@ -368,6 +399,7 @@ export class Renderer {
   }
 
   private syncBuildings(world: World, ui: UiState, now: number): void {
+    const vision = world.vision[LOCAL_PLAYER];
     const alive = new Set<number>();
     for (const b of world.buildings) {
       alive.add(b.id);
@@ -399,12 +431,32 @@ export class Renderer {
       });
       if (view.arm && p >= 1) view.arm.rotation.y = Math.sin(now * 0.0005 + b.id) * 1.1 - 0.5;
       view.frame.visible = ui.selectedBuilding === b.id;
+      // Enemy buildings stay on the map once they have been discovered.
+      view.obj.visible = b.owner === LOCAL_PLAYER || footprintSeen(vision.explored, b);
     }
     for (const [id, view] of this.buildingViews) {
       if (alive.has(id)) continue;
       this.scene.remove(view.obj);
       this.buildingViews.delete(id);
     }
+  }
+
+  /** Repaints the fog whenever the simulation has refreshed what we can see. */
+  private syncFog(world: World): void {
+    if (world.tick === this.fogTick) return;
+    this.fogTick = world.tick;
+    const { visible, explored } = world.vision[LOCAL_PLAYER];
+    const d = this.fogData;
+    for (let y = 0; y < MAP_H; y++) {
+      // The texture's first row is the south edge of the map.
+      const row = (MAP_H - 1 - y) * MAP_W;
+      for (let x = 0; x < MAP_W; x++) {
+        const i = cellIndex(x, y);
+        // Black where nothing has been seen, dimmed where it was seen earlier.
+        d[(row + x) * 4 + 3] = visible[i] ? 0 : explored[i] ? 120 : 255;
+      }
+    }
+    this.fogTexture.needsUpdate = true;
   }
 
   /** Passes a simulation event on to the battle effects. */
@@ -414,10 +466,12 @@ export class Renderer {
 
   /** Health bars for anything selected or damaged. */
   private syncHealth(world: World, ui: UiState, alpha: number): void {
+    const vision = world.vision[LOCAL_PLAYER];
     this.healthBars.begin();
     for (const u of world.units) {
       const max = UNIT_DEFS[u.type].hp;
       if (u.hp >= max && !ui.selectedUnits.has(u.id)) continue;
+      if (u.owner !== LOCAL_PLAYER && !vision.visible[u.cell]) continue;
       const size = RING_SIZE[u.type];
       this.healthBars.show(
         u.id,
@@ -432,6 +486,7 @@ export class Renderer {
     for (const b of world.buildings) {
       const max = BUILDING_DEFS[b.type].hp;
       if (b.hp >= max && ui.selectedBuilding !== b.id) continue;
+      if (b.owner !== LOCAL_PLAYER && !footprintSeen(vision.visible, b)) continue;
       this.healthBars.show(b.id, b.cx + b.w / 2, 2.5, b.cy + b.h / 2, b.hp / max, b.w * 0.8, this.camera);
     }
     this.healthBars.end();
