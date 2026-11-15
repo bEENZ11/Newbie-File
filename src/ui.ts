@@ -1,6 +1,6 @@
 // View-side state. Nothing in here affects the simulation.
 
-import { BUILDING_DEFS, type BuildingType } from './sim/types';
+import { BUILDING_DEFS, type BuildingType, type World } from './sim/types';
 
 /** The player sitting at this screen. */
 export const LOCAL_PLAYER = 0;
@@ -79,4 +79,9 @@ export function placementOrigin(ui: UiState, type: BuildingType): { cx: number; 
     cx: Math.floor(ui.hoverX - def.w / 2 + 0.5),
     cy: Math.floor(ui.hoverZ - def.h / 2 + 0.5),
   };
+}
+
+/** True if a player is on the other side from the one at this screen. */
+export function isHostile(world: World, owner: number): boolean {
+  return world.players[owner].team !== world.players[LOCAL_PLAYER].team;
 }

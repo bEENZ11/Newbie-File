@@ -10,14 +10,20 @@ export interface Palette {
   light: number;
 }
 
-const FACTION_PALETTES: Record<Faction, [Palette, Palette]> = {
+// Four shades each, so a game of four can have every seat in the same faction
+// and the armies can still be told apart.
+const FACTION_PALETTES: Record<Faction, Palette[]> = {
   aegis: [
     { main: 0x3f86e0, dark: 0x24569c, light: 0x9cc4f7 },
     { main: 0x2fa7a0, dark: 0x1b6b66, light: 0x9be0da },
+    { main: 0x7a6be0, dark: 0x4a3fa0, light: 0xc9c2f7 },
+    { main: 0xa9bccd, dark: 0x66798c, light: 0xe8eef4 },
   ],
   dominion: [
     { main: 0xd8483c, dark: 0x8f2a22, light: 0xf5a59c },
     { main: 0xe08a2e, dark: 0x93561a, light: 0xf6c990 },
+    { main: 0xd2ad36, dark: 0x8a6f1e, light: 0xf3e0a0 },
+    { main: 0xc8418f, dark: 0x7f255a, light: 0xf0a9d0 },
   ],
 };
 
@@ -26,9 +32,11 @@ export const palettes: Palette[] = [FACTION_PALETTES.aegis[0], FACTION_PALETTES.
 
 /** Works out each player's colours from the factions in play. Call before anything is drawn. */
 export function setFactions(factions: readonly Faction[]): void {
+  palettes.length = 0;
   factions.forEach((faction, player) => {
-    const taken = factions.slice(0, player).includes(faction);
-    palettes[player] = FACTION_PALETTES[faction][taken ? 1 : 0];
+    // Each player takes the next shade of their faction that nobody before them has.
+    const earlier = factions.slice(0, player).filter((f) => f === faction).length;
+    palettes.push(FACTION_PALETTES[faction][earlier % FACTION_PALETTES[faction].length]);
   });
 }
 

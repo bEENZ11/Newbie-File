@@ -24,6 +24,10 @@ Then open the address it prints. Add `?seed=123` to the address to get the same 
 - Generated terrain with rocks, lakes and woods.
 - A computer opponent that builds a base, harvests, and attacks in growing waves.
 - Synthesised sound effects.
+- Two factions, Aegis and Dominion, each with two soldiers and two vehicles of its own, chosen from a start menu.
+- A 128 by 128 map with big lakes, plentiful ore and richer gem fields in the middle.
+- Games for two or four players: 1 v 1, 2 v 2 with a computer ally, or a free for all.
+- A satellite uplink from the Tech Centre that reveals the whole map.
 - A wider roster: rocket soldiers, grenadiers, engineers that capture buildings, scout cars, artillery and heavy tanks, plus a Radar Station, Tech Centre, Service Depot and walls.
 - A deterministic simulation running at 20 ticks a second, separate from drawing and input.
 

@@ -34,17 +34,32 @@ import {
 export const START_CX = 14;
 export const START_CY = 11;
 
+/** One player's place at the table. */
+export interface Seat {
+  faction: Faction;
+  /** Seats with the same team number are allies. */
+  team: number;
+  /** True if the computer plays this seat. */
+  ai: boolean;
+}
+
 export interface Scenario {
   /** Adds a guarded enemy outpost in the far corner, giving the player something to fight. */
   outpost?: boolean;
   /** Scatters rocks, lakes and woods across the map. Without it the map is open grass. */
   terrain?: boolean;
   /**
-   * Players run by the computer. Player 1 starts with a Construction Yard in
-   * the far corner. Player 0 can also be listed, to watch two computers play.
+   * Up to four players. Seat 0 starts with a Pioneer in the north-west and
+   * every other seat with a Construction Yard in its own corner. If this is
+   * given, the three settings below it are ignored.
+   */
+  seats?: Seat[];
+  /**
+   * For a simple two-player game: which players the computer runs. Player 1
+   * starts with a Construction Yard in the far corner.
    */
   ai?: number[];
-  /** Which side each player commands. Player 0 is Aegis and player 1 Dominion unless told otherwise. */
+  /** For a simple two-player game: which side each player commands. */
   factions?: [Faction, Faction];
   /** How hard the computer plays. Normal if not given. */
   difficulty?: Difficulty;
@@ -52,81 +67,114 @@ export interface Scenario {
   credits?: number;
 }
 
-const OUTPOST_X = 46;
-const OUTPOST_Y = 44;
+/**
+ * Where each seat starts. The first two are opposite corners, so a two-player
+ * game begins as far apart as the map allows.
+ */
+export const BASES: readonly { x: number; y: number }[] = [
+  { x: START_CX, y: START_CY },
+  { x: MAP_W - 15, y: MAP_H - 12 },
+  { x: MAP_W - 15, y: START_CY },
+  { x: START_CX, y: MAP_H - 12 },
+];
+
+const OUTPOST_X = BASES[1].x - 3;
+const OUTPOST_Y = BASES[1].y - 3;
+/** No rocks, water, trees or stray ore are generated this close to a starting position. */
+const BASE_CLEARANCE = 11;
+
+function nearBase(x: number, y: number, distance: number): boolean {
+  return BASES.some((b) => Math.abs(x - b.x) < distance && Math.abs(y - b.y) < distance);
+}
 
 export function createWorld(seed: number, scenario: Scenario = {}): World {
   const aiPlayers = scenario.ai ?? [];
   const factions = scenario.factions ?? ['aegis', 'dominion'];
   const credits = scenario.credits ?? STARTING_CREDITS;
   const level = scenario.difficulty ?? 'normal';
+  const seats: Seat[] =
+    scenario.seats ??
+    [0, 1].map((i) => ({ faction: factions[i], team: i, ai: aiPlayers.includes(i) }));
+  // In the simple two-player form, the second player only exists if something puts them on the map.
+  const present = (i: number): boolean =>
+    i === 0 || scenario.seats !== undefined || seats[i].ai || scenario.outpost === true;
+
   const world: World = {
     tick: 0,
     winner: -1,
     rng: seed | 0,
     nextId: 1,
-    players: [
-      newPlayer(true, factions[0], credits),
-      newPlayer(scenario.outpost === true || aiPlayers.includes(1), factions[1], credits),
-    ],
-    ai: [0, 1].map((i) => (aiPlayers.includes(i) ? { wave: 0, lastWave: 0, trained: 0, built: 0, level } : null)),
+    players: seats.map((s, i) => newPlayer(present(i), s.faction, s.team, credits)),
+    ai: seats.map((s) => (s.ai ? { wave: 0, lastWave: 0, trained: 0, built: 0, level } : null)),
     units: [],
     buildings: [],
     terrain: new Uint8Array(MAP_W * MAP_H),
     ore: new Int32Array(MAP_W * MAP_H),
+    rich: new Uint8Array(MAP_W * MAP_H),
     blocked: new Uint8Array(MAP_W * MAP_H),
     occupied: new Int32Array(MAP_W * MAP_H),
-    vision: [0, 1].map(() => ({
+    vision: seats.map(() => ({
       visible: new Uint8Array(MAP_W * MAP_H),
       explored: new Uint8Array(MAP_W * MAP_H),
     })),
   };
-  if (scenario.terrain) generateTerrain(world);
+  if (scenario.terrain) generateTerrain(world, seats.length);
   scatterOre(world);
   spawnUnit(world, 'pioneer', 0, START_CX, START_CY);
   if (scenario.outpost) addOutpost(world);
-  if (aiPlayers.includes(1)) addRivalBase(world);
+  const rivals = seats.map((_, i) => i).filter((i) => i > 0 && (scenario.seats !== undefined || seats[i].ai));
+  for (const i of rivals) addRivalBase(world, i);
+  // Seat 0 gets the same ore on its doorstep as everyone else.
+  if (rivals.length > 0) homeOre(world, BASES[0]);
   updateVision(world);
   return world;
 }
 
-function newPlayer(active: boolean, faction: Faction, credits: number): Player {
+function newPlayer(active: boolean, faction: Faction, team: number, credits: number): Player {
   return {
     active,
     faction,
+    team,
     credits,
     production: null,
     queues: { infantry: emptyQueue(), vehicle: emptyQueue() },
+    uplink: 0,
   };
 }
 
-/** Lays down a rich ore field, so a base always has income within reach. */
-function orePatch(world: World, px: number, py: number, radius: number): void {
+/** Lays down an ore field. Gems are worth more, so a field of them is a prize worth fighting over. */
+function orePatch(world: World, px: number, py: number, radius: number, gems = false): void {
   for (let y = py - radius; y <= py + radius; y++) {
     for (let x = px - radius; x <= px + radius; x++) {
       if (!inBounds(x, y) || (x - px) * (x - px) + (y - py) * (y - py) > radius * radius) continue;
       const i = cellIndex(x, y);
-      if (world.terrain[i] === GRASS && !world.blocked[i]) world.ore[i] = 900;
+      if (world.terrain[i] !== GRASS || world.blocked[i]) continue;
+      world.ore[i] = gems ? 1400 : 900;
+      world.rich[i] = gems ? 1 : 0;
     }
   }
 }
 
-/**
- * The computer's starting position: a Construction Yard, a couple of guards
- * and an ore field. The player gets a matching ore field near their own start.
- */
-function addRivalBase(world: World): void {
-  for (let y = OUTPOST_Y - 3; y < OUTPOST_Y + 7; y++) {
-    for (let x = OUTPOST_X - 3; x < OUTPOST_X + 7; x++) {
+/** A good ore field a short drive from a base, towards the middle of the map. */
+function homeOre(world: World, base: { x: number; y: number }): void {
+  const sx = base.x < MAP_W / 2 ? 1 : -1;
+  const sy = base.y < MAP_H / 2 ? 1 : -1;
+  orePatch(world, base.x + sx * 8, base.y + sy * 7, 4);
+}
+
+/** A rival's starting position: a Construction Yard, a couple of guards and an ore field. */
+function addRivalBase(world: World, player: number): void {
+  const base = BASES[player];
+  for (let y = base.y - 4; y <= base.y + 5; y++) {
+    for (let x = base.x - 4; x <= base.x + 5; x++) {
       if (inBounds(x, y)) world.ore[cellIndex(x, y)] = 0;
     }
   }
-  const yard = addBuilding(world, 'conyard', 1, OUTPOST_X, OUTPOST_Y);
+  const yard = addBuilding(world, 'conyard', player, base.x - 1, base.y - 1);
   yard.progress = yard.total;
-  spawnUnit(world, 'rifleman', 1, OUTPOST_X - 2, OUTPOST_Y + 1);
-  spawnUnit(world, 'rifleman', 1, OUTPOST_X + 1, OUTPOST_Y - 2);
-  orePatch(world, OUTPOST_X + 9, OUTPOST_Y - 4, 4);
-  orePatch(world, START_CX + 6, START_CY + 7, 4);
+  spawnUnit(world, 'rifleman', player, base.x - 3, base.y);
+  spawnUnit(world, 'rifleman', player, base.x, base.y - 3);
+  homeOre(world, base);
 }
 
 /** A small finished enemy base with a few guards. It defends itself but builds nothing. */
@@ -161,49 +209,62 @@ function addOutpost(world: World): void {
 
 const emptyQueue = (): UnitQueue => ({ items: [], progress: 0, paid: 0, held: false, speedAcc: 0 });
 
-/** Fills a rough blob of cells with a ground type, leaving the two bases clear. */
-function blob(world: World, type: number, px: number, py: number, radius: number): void {
-  for (let y = py - radius; y <= py + radius; y++) {
-    for (let x = px - radius; x <= px + radius; x++) {
-      if (!inBounds(x, y)) continue;
-      const d2 = (x - px) * (x - px) + (y - py) * (y - py);
-      if (d2 > radius * radius) continue;
-      if (d2 > (radius - 1) * (radius - 1) && randInt(world, 2) === 0) continue;
-      const nearStart = Math.abs(x - START_CX) < 9 && Math.abs(y - START_CY) < 9;
-      const nearOutpost = Math.abs(x - OUTPOST_X - 3) < 11 && Math.abs(y - OUTPOST_Y - 3) < 11;
-      if (nearStart || nearOutpost) continue;
+/** Fills a rough blob of cells with a ground type, leaving every starting position clear. */
+function blob(world: World, type: number, px: number, py: number, rx: number, ry: number): void {
+  for (let y = py - ry; y <= py + ry; y++) {
+    for (let x = px - rx; x <= px + rx; x++) {
+      if (!inBounds(x, y) || nearBase(x, y, BASE_CLEARANCE)) continue;
+      // Scaled so the edge of the oval sits at 100.
+      const d = Math.floor((100 * (x - px) * (x - px)) / (rx * rx) + (100 * (y - py) * (y - py)) / (ry * ry));
+      if (d > 100) continue;
+      // A ragged edge, so shores and treelines are not perfect ovals.
+      if (d > 70 && randInt(world, 2) === 0) continue;
       world.terrain[cellIndex(x, y)] = type;
     }
   }
 }
 
-/** Rocky outcrops, lakes and woods. Retries until the two bases are connected. */
-function generateTerrain(world: World): void {
-  for (let attempt = 0; attempt < 8; attempt++) {
+/**
+ * Big lakes, rocky outcrops and woods. Each lake is several overlapping ovals,
+ * which gives it bays and headlands. Retries until every starting position
+ * can be reached from the first.
+ */
+function generateTerrain(world: World, seats: number): void {
+  for (let attempt = 0; attempt < 30; attempt++) {
     world.terrain.fill(GRASS);
-    const at = (): [number, number] => [3 + randInt(world, MAP_W - 6), 3 + randInt(world, MAP_H - 6)];
-    for (let i = 0; i < 3; i++) blob(world, WATER, ...at(), 3 + randInt(world, 3));
-    for (let i = 0; i < 7; i++) blob(world, ROCK, ...at(), 1 + randInt(world, 3));
-    for (let i = 0; i < 16; i++) blob(world, TREES, ...at(), 1 + randInt(world, 2));
+    const at = (): [number, number] => [6 + randInt(world, MAP_W - 12), 6 + randInt(world, MAP_H - 12)];
+    for (let lake = 0; lake < 6; lake++) {
+      const [lx, ly] = at();
+      for (let part = 0; part < 3; part++) {
+        blob(world, WATER, lx + randInt(world, 15) - 7, ly + randInt(world, 15) - 7, 6 + randInt(world, 7), 5 + randInt(world, 6));
+      }
+    }
+    for (let i = 0; i < 18; i++) blob(world, ROCK, ...at(), 1 + randInt(world, 3), 1 + randInt(world, 3));
+    for (let i = 0; i < 46; i++) blob(world, TREES, ...at(), 1 + randInt(world, 3), 1 + randInt(world, 3));
     for (let i = 0; i < world.terrain.length; i++) world.blocked[i] = world.terrain[i] !== GRASS ? 1 : 0;
-    const route = findPath(world.blocked, MAP_W, MAP_H, cellIndex(START_CX, START_CY), OUTPOST_X - 2, OUTPOST_Y + 1);
-    if (route.length > 0 && route[route.length - 1] === cellIndex(OUTPOST_X - 2, OUTPOST_Y + 1)) return;
+
+    const home = cellIndex(BASES[0].x, BASES[0].y);
+    const connected = BASES.slice(1, Math.max(2, seats)).every((b) => {
+      const route = findPath(world.blocked, MAP_W, MAP_H, home, b.x, b.y);
+      return route.length > 0 && route[route.length - 1] === cellIndex(b.x, b.y);
+    });
+    if (connected) return;
   }
   // Could not find a layout with a way through, so fall back to open ground.
   world.terrain.fill(GRASS);
   world.blocked.fill(0);
 }
 
-/** A few ore patches, kept clear of the starting position. */
+/**
+ * Plenty of ordinary ore across the map, and a few fields of gems around the
+ * middle, where every side has to come out and compete for them.
+ */
 function scatterOre(world: World): void {
-  let placed = 0;
-  let attempts = 0;
-  while (placed < 5 && attempts < 200) {
-    attempts++;
-    const px = 4 + randInt(world, MAP_W - 8);
-    const py = 4 + randInt(world, MAP_H - 8);
-    const radius = 3 + randInt(world, 3);
-    if (Math.abs(px - START_CX) < 10 && Math.abs(py - START_CY) < 10) continue;
+  const field = (gems: boolean, low: number, span: number, radiusBase: number, radiusSpan: number): void => {
+    const px = low + randInt(world, span);
+    const py = low + randInt(world, span);
+    const radius = radiusBase + randInt(world, radiusSpan);
+    if (nearBase(px, py, BASE_CLEARANCE + radius)) return;
     for (let y = py - radius; y <= py + radius; y++) {
       for (let x = px - radius; x <= px + radius; x++) {
         if (!inBounds(x, y)) continue;
@@ -211,12 +272,16 @@ function scatterOre(world: World): void {
         // Ragged edges: cells near the rim only sometimes get ore.
         if (d2 > radius * radius) continue;
         if (d2 > (radius - 1) * (radius - 1) && randInt(world, 3) === 0) continue;
-        if (world.terrain[cellIndex(x, y)] !== GRASS) continue;
-        world.ore[cellIndex(x, y)] = 600 + randInt(world, 5) * 100;
+        const i = cellIndex(x, y);
+        if (world.terrain[i] !== GRASS) continue;
+        world.ore[i] = gems ? 1200 + randInt(world, 5) * 100 : 600 + randInt(world, 5) * 100;
+        world.rich[i] = gems ? 1 : 0;
       }
     }
-    placed++;
-  }
+  };
+  for (let i = 0; i < 22; i++) field(false, 5, MAP_W - 10, 3, 4);
+  // Gems only turn up in the middle half of the map.
+  for (let i = 0; i < 7; i++) field(true, MAP_W >> 2, MAP_W >> 1, 2, 2);
 }
 
 export function spawnUnit(world: World, type: UnitType, owner: number, cx: number, cy: number): Unit {
@@ -247,6 +312,7 @@ export function spawnUnit(world: World, type: UnitType, owner: number, cx: numbe
     capture: 0,
     job: type === 'harvester' ? 'seek' : 'none',
     cargo: 0,
+    load: 0,
     target: -1,
     home: -1,
     refinery: 0,
@@ -358,6 +424,8 @@ export function hashWorld(world: World): number {
   mix(world.nextId);
   for (const p of world.players) {
     mix(FACTIONS.indexOf(p.faction));
+    mix(p.team);
+    mix(p.uplink);
     mix(p.credits);
     const prod = p.production;
     mix(prod ? 1 : 0);
@@ -398,6 +466,7 @@ export function hashWorld(world: World): number {
     mix(u.capture);
     mix(HARVEST_JOBS.indexOf(u.job));
     mix(u.cargo);
+    mix(u.load);
     mix(u.target);
     mix(u.home);
     mix(u.refinery);

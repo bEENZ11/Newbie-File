@@ -1,8 +1,8 @@
 // Everything in this folder is the deterministic simulation.
 // Rules: integers only in game state, no Math.random, no Date, no DOM.
 
-export const MAP_W = 64;
-export const MAP_H = 64;
+export const MAP_W = 128;
+export const MAP_H = 128;
 /** Sub-cell resolution. A unit's position is measured in 1/SUB of a cell. */
 export const SUB = 256;
 export const TICK_RATE = 20;
@@ -15,6 +15,10 @@ export const SELL_REFUND_PERCENT = 50;
 export const MIN_POWER_RATE = 64;
 /** Credits' worth of ore a harvester carries when full. */
 export const HARVEST_CAPACITY = 500;
+/** How long a Tech Centre takes to bring its satellite uplink online: two and a half minutes. */
+export const UPLINK_TICKS = 3000;
+/** Credits each unit of gems is worth. Ordinary ore is worth one, so a load of gems pays double. */
+export const GEM_VALUE = 2;
 /** Ore gathered per tick while harvesting. */
 export const GATHER_RATE = 5;
 /** Ore turned into credits per tick while unloading. */
@@ -366,10 +370,10 @@ export const UNIT_DEFS: Record<UnitType, UnitDef> = {
     armour: 'vehicle',
     weapon: {
       range: 9,
-      damage: 90,
-      cooldown: 90,
+      damage: 70,
+      cooldown: 100,
       kind: 'shell',
-      versus: { infantry: 90, vehicle: 50, building: 130 },
+      versus: { infantry: 90, vehicle: 50, building: 115 },
     },
     speed: 28,
     cost: 900,
@@ -387,7 +391,7 @@ export const UNIT_DEFS: Record<UnitType, UnitDef> = {
       damage: 66,
       cooldown: 50,
       kind: 'shell',
-      versus: { infantry: 70, vehicle: 100, building: 90 },
+      versus: { infantry: 70, vehicle: 100, building: 110 },
     },
     speed: 30,
     cost: 1100,
@@ -444,7 +448,7 @@ export const UNIT_DEFS: Record<UnitType, UnitDef> = {
       damage: 10,
       cooldown: 5,
       kind: 'flame',
-      versus: { infantry: 120, vehicle: 15, building: 90 },
+      versus: { infantry: 120, vehicle: 15, building: 120 },
     },
     speed: 30,
     cost: 180,
@@ -469,16 +473,16 @@ export const UNIT_DEFS: Record<UnitType, UnitDef> = {
   flametank: {
     name: 'Flame Tank',
     sight: 5,
-    hp: 560,
+    hp: 700,
     armour: 'vehicle',
     weapon: {
       range: 3,
-      damage: 14,
-      cooldown: 8,
+      damage: 16,
+      cooldown: 6,
       kind: 'flame',
-      versus: { infantry: 120, vehicle: 45, building: 110 },
+      versus: { infantry: 120, vehicle: 45, building: 150 },
     },
-    speed: 42,
+    speed: 46,
     cost: 800,
     produceTicks: 300,
     queue: 'vehicle',
@@ -646,7 +650,10 @@ export interface Unit {
   capture: number;
   // Harvesters only.
   job: HarvestJob;
+  /** What the load is worth, in credits. */
   cargo: number;
+  /** How full the hopper is, out of the harvester's capacity. */
+  load: number;
   /** The ore cell it is working, or -1. */
   target: number;
   /** The ore cell it last worked, so it returns to the same field. */
@@ -706,14 +713,21 @@ export interface Player {
   /** True if this player started the game with anything on the map. */
   active: boolean;
   faction: Faction;
+  /** Players on the same team are allies. They share what they see and never fight each other. */
+  team: number;
   credits: number;
   production: Production | null;
   queues: Record<QueueKind, UnitQueue>;
+  /**
+   * Progress towards the satellite uplink, in ticks. It charges while the
+   * player has a powered Tech Centre, and once full it shows them the whole map.
+   */
+  uplink: number;
 }
 
 export interface World {
   tick: number;
-  /** The last player standing once the game is decided, or -1. */
+  /** The last team standing once the game is decided, or -1. */
   winner: number;
   rng: number;
   nextId: number;
@@ -722,8 +736,10 @@ export interface World {
   buildings: Building[];
   /** Ground type per cell. */
   terrain: Uint8Array;
-  /** Ore amount per cell. */
+  /** Ore per cell, measured in the credits it is worth. */
   ore: Int32Array;
+  /** 1 where the ore is gems, which are worth more for the room they take up. */
+  rich: Uint8Array;
   /** 1 where a building stands. Derived from buildings. */
   blocked: Uint8Array;
   /** The id of the unit holding each cell, or 0. Derived from units. */
@@ -766,7 +782,8 @@ export type SimEvent =
   | { type: 'gameOver'; winner: number }
   | { type: 'captured'; buildingId: number; player: number; from: number }
   | { type: 'mended'; buildingId: number; player: number }
-  | { type: 'sabotaged'; buildingId: number; player: number; from: number };
+  | { type: 'sabotaged'; buildingId: number; player: number; from: number }
+  | { type: 'uplinkOnline'; player: number };
 
 export const cellIndex = (cx: number, cy: number): number => cy * MAP_W + cx;
 export const inBounds = (cx: number, cy: number): boolean =>
@@ -797,3 +814,7 @@ export const isWall = (type: BuildingType): boolean => BUILDING_DEFS[type].wall 
 export const entersBuildings = (type: UnitType): boolean => type === 'engineer' || type === 'saboteur';
 /** Damage a saboteur's charges do. Enough to level most buildings outright. */
 export const SABOTAGE_DAMAGE = 650;
+
+/** True if two players are on opposing teams. */
+export const hostile = (world: World, a: number, b: number): boolean =>
+  world.players[a].team !== world.players[b].team;

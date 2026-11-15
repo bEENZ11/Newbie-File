@@ -12,6 +12,7 @@ import {
   SABOTAGE_DAMAGE,
   UNIT_DEFS,
   entersBuildings,
+  hostile,
   isActive,
   isWall,
   type Building,
@@ -48,7 +49,7 @@ export function orderCapture(world: World, player: number, unitIds: number[], bu
     const unit = world.units.find((u) => u.id === id);
     if (!unit || unit.owner !== player || !entersBuildings(unit.type)) continue;
     // A saboteur has no business in one of its own side's buildings.
-    if (unit.type === 'saboteur' && b.owner === player) continue;
+    if (unit.type === 'saboteur' && !hostile(world, b.owner, player)) continue;
     unit.capture = buildingId;
     unit.timer = 0;
   }
@@ -58,7 +59,7 @@ export function tickEngineers(world: World, events: SimEvent[]): void {
   for (const unit of world.units.slice()) {
     if (!entersBuildings(unit.type) || unit.capture === 0) continue;
     const b = world.buildings.find((x) => x.id === unit.capture);
-    if (!b || b.selling || b.hp <= 0 || (unit.type === 'saboteur' && b.owner === unit.owner)) {
+    if (!b || b.selling || b.hp <= 0 || (unit.type === 'saboteur' && !hostile(world, b.owner, unit.owner))) {
       unit.capture = 0;
       continue;
     }
@@ -68,7 +69,7 @@ export function tickEngineers(world: World, events: SimEvent[]): void {
         // The charges go off. Anything left standing is cleared up with the other casualties.
         b.hp -= SABOTAGE_DAMAGE;
         events.push({ type: 'sabotaged', buildingId: b.id, player: unit.owner, from: b.owner });
-      } else if (b.owner !== unit.owner) {
+      } else if (hostile(world, b.owner, unit.owner)) {
         const from = b.owner;
         b.owner = unit.owner;
         b.rally = -1;

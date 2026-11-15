@@ -2,7 +2,7 @@ import { SIN_PITCH, type Renderer } from '../render/renderer';
 import type { Sim } from '../sim/sim';
 import { checkPlacement } from '../sim/production';
 import { BUILDING_DEFS, MAP_H, MAP_W, SUB, UNIT_DEFS, entersBuildings, isWall, type Unit } from '../sim/types';
-import { DIAMOND_YAW, LOCAL_PLAYER, ZOOM_MAX, ZOOM_MIN, placementOrigin, type UiState } from '../ui';
+import { DIAMOND_YAW, LOCAL_PLAYER, ZOOM_MAX, ZOOM_MIN, isHostile, placementOrigin, type UiState } from '../ui';
 
 const DRAG_THRESHOLD = 5;
 const EDGE = 14;
@@ -96,7 +96,7 @@ export class Input {
     let bestD = (UNIT_PICK_RADIUS * this.ui.zoom) ** 2;
     for (const u of this.sim.world.units) {
       if (side === 'own' && u.owner !== LOCAL_PLAYER) continue;
-      if (side === 'enemy' && u.owner === LOCAL_PLAYER) continue;
+      if (side === 'enemy' && !isHostile(this.sim.world, u.owner)) continue;
       // Enemies hidden by the fog cannot be clicked on.
       if (u.owner !== LOCAL_PLAYER && !this.sim.world.vision[LOCAL_PLAYER].visible[u.cell]) continue;
       const p = this.unitScreenPos(u);
@@ -218,7 +218,7 @@ export class Input {
     const worthEntering =
       building &&
       !isWall(building.type) &&
-      (building.owner !== LOCAL_PLAYER || building.hp < BUILDING_DEFS[building.type].hp);
+      (isHostile(this.sim.world, building.owner) || building.hp < BUILDING_DEFS[building.type].hp);
     if (building && worthEntering && engineers.length > 0) {
       this.sim.issue({
         type: 'capture',
@@ -232,7 +232,7 @@ export class Input {
 
     // Right-clicking something of the enemy's is an order to attack it.
     const foe = this.unitAt(sx, sy, 'enemy');
-    const hostile = foe ?? (building && building.owner !== LOCAL_PLAYER ? building : null);
+    const hostile = foe ?? (building && isHostile(this.sim.world, building.owner) ? building : null);
     const armed = this.sim.world.units.filter(
       (u) => ui.selectedUnits.has(u.id) && UNIT_DEFS[u.type].weapon,
     );

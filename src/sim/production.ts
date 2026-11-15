@@ -10,6 +10,7 @@ import {
   REPAIR_HP,
   REPAIR_INTERVAL,
   SELL_REFUND_PERCENT,
+  UPLINK_TICKS,
   cellIndex,
   dockCell,
   inBounds,
@@ -144,6 +145,27 @@ export function tickProduction(world: World, events: SimEvent[]): void {
 /** The radar map needs a working Radar Station and enough power to run it. */
 export function hasRadar(world: World, player: number): boolean {
   return owns(world, player, 'radar') && !powerOf(world, player).low;
+}
+
+/** True while a player's satellite is up: fully charged, with a powered Tech Centre still standing. */
+export function uplinkOnline(world: World, player: number): boolean {
+  return world.players[player].uplink >= UPLINK_TICKS && owns(world, player, 'tech') && !powerOf(world, player).low;
+}
+
+/**
+ * Charges each player's satellite uplink. It needs a working Tech Centre and
+ * full power to make progress, and starts again from nothing if the Tech
+ * Centre is lost.
+ */
+export function tickUplinks(world: World, events: SimEvent[]): void {
+  world.players.forEach((p, player) => {
+    if (!owns(world, player, 'tech')) {
+      p.uplink = 0;
+      return;
+    }
+    if (p.uplink >= UPLINK_TICKS || powerOf(world, player).low) return;
+    if (++p.uplink === UPLINK_TICKS) events.push({ type: 'uplinkOnline', player });
+  });
 }
 
 export interface PlacementCheck {

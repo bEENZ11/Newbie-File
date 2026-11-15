@@ -8,6 +8,7 @@ import {
   MAP_W,
   UNIT_DEFS,
   cellCentre,
+  hostile,
   isActive,
   isWall,
   type ArmourClass,
@@ -59,7 +60,7 @@ function acquire(world: World, unit: Unit, range2: number): number {
   let best = 0;
   let bestD = range2 + 1;
   for (const other of world.units) {
-    if (other.owner === unit.owner || other.hp <= 0) continue;
+    if (!hostile(world, other.owner, unit.owner) || other.hp <= 0) continue;
     const d = distance2(unit, { unit: other });
     if (d < bestD) {
       best = other.id;
@@ -69,7 +70,7 @@ function acquire(world: World, unit: Unit, range2: number): number {
   if (best !== 0) return best;
   for (const b of world.buildings) {
     // Walls are only shot at on a direct order. Otherwise troops would stop to chip at every one.
-    if (b.owner === unit.owner || b.hp <= 0 || isWall(b.type)) continue;
+    if (!hostile(world, b.owner, unit.owner) || b.hp <= 0 || isWall(b.type)) continue;
     const d = distance2(unit, { building: b });
     if (d < bestD) {
       best = b.id;
@@ -82,7 +83,7 @@ function acquire(world: World, unit: Unit, range2: number): number {
 /** An attack order from the player: go after the target until it is destroyed. */
 export function orderAttack(world: World, player: number, unitIds: number[], targetId: number): void {
   const target = findTarget(world, targetId);
-  if (!target || ownerOf(target) === player) return;
+  if (!target || !hostile(world, ownerOf(target), player)) return;
   for (const id of unitIds) {
     const unit = world.units.find((u) => u.id === id);
     if (!unit || unit.owner !== player || !UNIT_DEFS[unit.type].weapon) continue;
@@ -154,7 +155,7 @@ export function tickCombat(world: World, events: SimEvent[]): void {
     const range2 = weapon.range * weapon.range;
 
     let target = findTarget(world, unit.attack);
-    if (unit.attack !== 0 && (!target || ownerOf(target) === unit.owner)) {
+    if (unit.attack !== 0 && (!target || !hostile(world, ownerOf(target), unit.owner))) {
       // The target is gone. Stop where we are.
       if (unit.chase) haltUnit(unit);
       unit.attack = 0;
@@ -220,7 +221,7 @@ function tickTurrets(world: World, events: SimEvent[]): void {
     let victim: Unit | null = null;
     let bestD = weapon.range * weapon.range + 1;
     for (const u of world.units) {
-      if (u.owner === b.owner || u.hp <= 0) continue;
+      if (!hostile(world, u.owner, b.owner) || u.hp <= 0) continue;
       const dx = cellX(u.cell) - b.cx;
       const dy = cellY(u.cell) - b.cy;
       const d = dx * dx + dy * dy;
@@ -259,12 +260,17 @@ function isDefeated(world: World, player: number): boolean {
 
 function checkVictory(world: World, events: SimEvent[]): void {
   if (world.winner !== -1) return;
-  const contenders = world.players.map((p, i) => (p.active ? i : -1)).filter((i) => i !== -1);
-  if (contenders.length < 2) return;
-  const standing = contenders.filter((i) => !isDefeated(world, i));
-  if (standing.length !== 1) return;
-  world.winner = standing[0];
-  events.push({ type: 'gameOver', winner: standing[0] });
+  // A team is still in the game while any one of its players is.
+  const teams = new Set<number>();
+  const standing = new Set<number>();
+  world.players.forEach((p, i) => {
+    if (!p.active) return;
+    teams.add(p.team);
+    if (!isDefeated(world, i)) standing.add(p.team);
+  });
+  if (teams.size < 2 || standing.size !== 1) return;
+  world.winner = [...standing][0];
+  events.push({ type: 'gameOver', winner: world.winner });
 }
 
 /** Full health for whatever this is, used to draw health bars. */

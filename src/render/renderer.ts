@@ -35,7 +35,9 @@ const CAMERA_DISTANCE = 120;
 const MARKER_MS = 450;
 const FLASH_MS = 600;
 const TURN_RATE = 9;
-const TERRAIN_TEXELS = 16;
+const TERRAIN_TEXELS = 12;
+/** The most nuggets ever drawn on one cell. */
+const MAX_NUGGETS = 6;
 
 /** Cheap repeatable noise so terrain and ore look the same every time. */
 function noise(x: number, y: number, salt: number): number {
@@ -139,9 +141,14 @@ export class Renderer {
 
   private unitViews = new Map<number, UnitView>();
   private buildingViews = new Map<number, BuildingView>();
-  private oreMesh: THREE.InstancedMesh | null = null;
+  private oreMeshes: { mesh: THREE.InstancedMesh; cells: number[] }[] | null = null;
   private oreSeen = new Int32Array(MAP_W * MAP_H);
-  private oreDrawn = false;
+  private oreSlot = new Int32Array(MAP_W * MAP_H);
+  private oreMatrix = new THREE.Matrix4();
+  private orePos = new THREE.Vector3();
+  private oreScale = new THREE.Vector3();
+  private oreQuat = new THREE.Quaternion();
+  private oreEuler = new THREE.Euler();
 
   private ringGeo = new THREE.RingGeometry(1.08, 1.14, 56).rotateX(-Math.PI / 2);
   private overlayMat = new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false });
@@ -438,54 +445,66 @@ export class Renderer {
     this.gl.render(this.scene, this.camera);
   }
 
-  private syncOre(world: World): void {
-    let changed = !this.oreDrawn;
-    for (let i = 0; i < world.ore.length && !changed; i++) {
-      if (oreNuggets(world.ore[i]) !== this.oreSeen[i]) changed = true;
-    }
-    if (!changed) return;
-    for (let i = 0; i < world.ore.length; i++) this.oreSeen[i] = oreNuggets(world.ore[i]);
-    this.oreDrawn = true;
+  /** Where one nugget on a cell sits, or a matrix that hides it if it has been mined away. */
+  private nugget(cell: number, i: number, shown: boolean, gems: boolean): THREE.Matrix4 {
+    const x = cell % MAP_W;
+    const y = (cell - x) / MAP_W;
+    const s = shown ? (gems ? 0.11 : 0.09) + noise(x, y, 60 + i) * 0.08 : 0;
+    this.oreEuler.set(noise(x, y, 70 + i) * 0.8, noise(x, y, 80 + i) * 6.28, noise(x, y, 90 + i) * 0.8);
+    return this.oreMatrix.compose(
+      this.orePos.set(x + 0.15 + noise(x, y, 40 + i) * 0.7, s * 0.7, y + 0.15 + noise(x, y, 50 + i) * 0.7),
+      this.oreQuat.setFromEuler(this.oreEuler),
+      this.oreScale.set(s, s * (gems ? 2 : 1.5), s),
+    );
+  }
 
-    if (this.oreMesh) {
-      this.scene.remove(this.oreMesh);
-      this.oreMesh.dispose();
-    }
-    const spots: THREE.Matrix4[] = [];
-    const q = new THREE.Quaternion();
-    const e = new THREE.Euler();
-    for (let y = 0; y < MAP_H; y++) {
-      for (let x = 0; x < MAP_W; x++) {
-        const count = oreNuggets(world.ore[cellIndex(x, y)]);
-        for (let i = 0; i < count; i++) {
-          const s = 0.09 + noise(x, y, 60 + i) * 0.08;
-          e.set(noise(x, y, 70 + i) * 0.8, noise(x, y, 80 + i) * 6.28, noise(x, y, 90 + i) * 0.8);
-          spots.push(
-            new THREE.Matrix4().compose(
-              new THREE.Vector3(
-                x + 0.15 + noise(x, y, 40 + i) * 0.7,
-                s * 0.7,
-                y + 0.15 + noise(x, y, 50 + i) * 0.7,
-              ),
-              q.setFromEuler(e),
-              new THREE.Vector3(s, s * 1.5, s),
-            ),
-          );
+  /**
+   * Ore is gold and gems are blue-green. Every cell that starts with any gets
+   * its own fixed set of nuggets, so mining a cell only touches that cell.
+   */
+  private syncOre(world: World): void {
+    if (!this.oreMeshes) {
+      const build = (gems: boolean): { mesh: THREE.InstancedMesh; cells: number[] } => {
+        const cells: number[] = [];
+        for (let i = 0; i < world.ore.length; i++) {
+          if (world.ore[i] > 0 && (world.rich[i] === 1) === gems) cells.push(i);
         }
-      }
+        const material = new THREE.MeshStandardMaterial({
+          color: gems ? 0x39d8c8 : 0xf2b22a,
+          emissive: gems ? 0x0b5a66 : 0x5a3600,
+          roughness: gems ? 0.12 : 0.28,
+          metalness: gems ? 0.35 : 0.55,
+          flatShading: true,
+        });
+        const mesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(1), material, Math.max(1, cells.length * MAX_NUGGETS));
+        cells.forEach((cell, slot) => {
+          this.oreSlot[cell] = slot;
+          for (let i = 0; i < MAX_NUGGETS; i++) mesh.setMatrixAt(slot * MAX_NUGGETS + i, this.nugget(cell, i, false, gems));
+        });
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        // Nuggets are spread across the whole map, so the default bounds would hide them wrongly.
+        mesh.frustumCulled = false;
+        this.scene.add(mesh);
+        return { mesh, cells };
+      };
+      this.oreSeen.fill(0);
+      this.oreMeshes = [build(false), build(true)];
     }
-    const material = new THREE.MeshStandardMaterial({
-      color: 0xf2b22a,
-      emissive: 0x5a3600,
-      roughness: 0.28,
-      metalness: 0.55,
-      flatShading: true,
+    this.oreMeshes.forEach(({ mesh, cells }, kind) => {
+      let touched = false;
+      for (const cell of cells) {
+        const count = oreNuggets(world.ore[cell]);
+        if (count === this.oreSeen[cell]) continue;
+        this.oreSeen[cell] = count;
+        const slot = this.oreSlot[cell];
+        for (let i = 0; i < MAX_NUGGETS; i++) {
+          mesh.setMatrixAt(slot * MAX_NUGGETS + i, this.nugget(cell, i, i < count, kind === 1));
+        }
+        touched = true;
+      }
+      if (touched) mesh.instanceMatrix.needsUpdate = true;
     });
-    this.oreMesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(1), material, spots.length);
-    spots.forEach((m, i) => this.oreMesh!.setMatrixAt(i, m));
-    this.oreMesh.castShadow = true;
-    this.oreMesh.receiveShadow = true;
-    this.scene.add(this.oreMesh);
   }
 
   private syncUnits(world: World, ui: UiState, alpha: number, dt: number): void {
@@ -531,8 +550,8 @@ export class Renderer {
       view.ring.visible = ui.selectedUnits.has(u.id);
       if (view.cargo) {
         // The heap in the hopper rises as the harvester fills up.
-        view.cargo.visible = u.cargo > 0;
-        view.cargo.scale.y = Math.max(0.02, u.cargo / HARVEST_CAPACITY);
+        view.cargo.visible = u.load > 0;
+        view.cargo.scale.y = Math.max(0.02, u.load / HARVEST_CAPACITY);
       }
       if (view.drum && u.job === 'harvest') view.drum.rotation.y += dt * 9;
       if (view.anim) {

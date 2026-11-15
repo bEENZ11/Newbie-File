@@ -3,6 +3,7 @@
 import { isSettled, setDestination } from './movement';
 import {
   GATHER_RATE,
+  GEM_VALUE,
   HARVEST_CAPACITY,
   MAP_W,
   UNLOAD_RATE,
@@ -109,11 +110,11 @@ export function orderHarvester(world: World, unit: Unit, cx: number, cy: number)
 export function tickHarvester(world: World, unit: Unit): void {
   switch (unit.job) {
     case 'idle':
-      if (--unit.timer <= 0) unit.job = unit.cargo >= HARVEST_CAPACITY ? 'return' : 'seek';
+      if (--unit.timer <= 0) unit.job = unit.load >= HARVEST_CAPACITY ? 'return' : 'seek';
       break;
 
     case 'seek': {
-      if (unit.cargo >= HARVEST_CAPACITY) {
+      if (unit.load >= HARVEST_CAPACITY) {
         unit.job = 'return';
         break;
       }
@@ -144,10 +145,14 @@ export function tickHarvester(world: World, unit: Unit): void {
       break;
 
     case 'harvest': {
-      const take = Math.min(GATHER_RATE, world.ore[unit.cell], HARVEST_CAPACITY - unit.cargo);
+      // Gems take up no more room than ore, but each scoop of them is worth more.
+      const value = world.rich[unit.cell] ? GEM_VALUE : 1;
+      const scoop = Math.min(GATHER_RATE, HARVEST_CAPACITY - unit.load, Math.ceil(world.ore[unit.cell] / value));
+      const take = Math.min(world.ore[unit.cell], scoop * value);
+      unit.load += scoop;
       world.ore[unit.cell] -= take;
       unit.cargo += take;
-      if (unit.cargo >= HARVEST_CAPACITY) unit.job = 'return';
+      if (unit.load >= HARVEST_CAPACITY) unit.job = 'return';
       else if (world.ore[unit.cell] <= 0) unit.job = 'seek';
       break;
     }
@@ -184,10 +189,16 @@ export function tickHarvester(world: World, unit: Unit): void {
         unit.job = 'return';
         break;
       }
-      const amount = Math.min(UNLOAD_RATE, unit.cargo);
+      // A hopper of gems empties in the same time as one of ore, so it pays out faster.
+      const amount = Math.min(unit.cargo, Math.max(UNLOAD_RATE, Math.ceil((unit.cargo * UNLOAD_RATE) / Math.max(1, unit.load))));
+      const emptied = Math.min(unit.load, UNLOAD_RATE);
       unit.cargo -= amount;
+      unit.load -= emptied;
       world.players[unit.owner].credits += amount;
-      if (unit.cargo <= 0) unit.job = 'seek';
+      if (unit.cargo <= 0) {
+        unit.load = 0;
+        unit.job = 'seek';
+      }
       break;
     }
 

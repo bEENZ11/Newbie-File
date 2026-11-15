@@ -1,5 +1,6 @@
 // What each player can currently see, and what they have ever seen.
 
+import { uplinkOnline } from './production';
 import { BUILDING_SIGHT, MAP_H, MAP_W, UNIT_DEFS, cellIndex, isWall, type World } from './types';
 
 /** How many ticks pass between refreshes. Sight does not need to be instant. */
@@ -21,13 +22,21 @@ function reveal(visible: Uint8Array, cx: number, cy: number, radius: number): vo
 export function updateVision(world: World): void {
   world.vision.forEach((v, player) => {
     v.visible.fill(0);
+    // Allies share what they see, so a team fights as one.
+    const team = world.players[player].team;
+    // A satellite overhead shows the whole map to its owner and their allies.
+    if (world.players.some((p, i) => p.team === team && uplinkOnline(world, i))) {
+      v.visible.fill(1);
+      v.explored.fill(1);
+      return;
+    }
     for (const u of world.units) {
-      if (u.owner !== player) continue;
+      if (world.players[u.owner].team !== team) continue;
       const x = u.cell % MAP_W;
       reveal(v.visible, x, (u.cell - x) / MAP_W, UNIT_DEFS[u.type].sight);
     }
     for (const b of world.buildings) {
-      if (b.owner !== player) continue;
+      if (world.players[b.owner].team !== team) continue;
       // Walls are not lookouts. They see only the ground beside them.
       const sight = isWall(b.type) ? 1 : BUILDING_SIGHT + (b.w >> 1);
       reveal(v.visible, b.cx + (b.w >> 1), b.cy + (b.h >> 1), sight);

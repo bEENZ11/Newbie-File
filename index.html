@@ -146,6 +146,9 @@
         gap: 16px 24px;
         margin-top: 22px;
       }
+      .settings .wide {
+        grid-column: 1 / -1;
+      }
       .choice {
         display: flex;
         gap: 6px;
@@ -272,7 +275,7 @@
         color: var(--gold);
         line-height: 1.15;
       }
-      #power-head {
+      .head-row {
         display: flex;
         justify-content: space-between;
         align-items: baseline;
@@ -306,6 +309,33 @@
         width: 2px;
         background: #fff;
         transition: left 0.3s;
+      }
+      #uplink[hidden] {
+        display: none;
+      }
+      #uplink-text {
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        color: #cfd6dc;
+      }
+      #uplink-bar {
+        height: 6px;
+        margin-top: 6px;
+        background: #0c0e10;
+        border: 1px solid var(--line);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      #uplink-fill {
+        height: 100%;
+        background: #4f9fff;
+      }
+      #uplink.online #uplink-fill {
+        background: #4fd16a;
+      }
+      #uplink.online #uplink-text {
+        color: #8df0a2;
+        font-weight: 650;
       }
       #power.low #power-fill {
         background: #e8483f;
@@ -575,11 +605,16 @@
     <div id="menu">
       <div id="menu-box">
         <h1>Aegis <span>and</span> Dominion</h1>
-        <p class="strap">A skirmish for control of the frontier. Choose your side.</p>
+        <p class="strap">A battle for control of the frontier. Choose your side.</p>
         <div id="factions"></div>
         <div class="settings">
+          <div class="wide">
+            <div class="label">Game</div>
+            <div id="mode" class="choice"></div>
+            <div id="mode-note" class="hintline"></div>
+          </div>
           <div>
-            <div class="label">Opponent</div>
+            <div class="label">Opponents</div>
             <div id="enemy" class="choice"></div>
           </div>
           <div>
@@ -614,11 +649,18 @@
         <div id="credits">0</div>
       </div>
       <div id="power">
-        <div id="power-head">
+        <div class="head-row">
           <span class="label">Power</span>
           <span id="power-text"></span>
         </div>
         <div id="power-bar"><div id="power-fill"></div></div>
+      </div>
+      <div id="uplink" hidden>
+        <div class="head-row">
+          <span class="label">Satellite</span>
+          <span id="uplink-text"></span>
+        </div>
+        <div id="uplink-bar"><div id="uplink-fill"></div></div>
       </div>
       <div>
         <div id="tabs">

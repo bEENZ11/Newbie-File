@@ -12,6 +12,7 @@ import {
   toggleRepair,
   startProduction,
   tickBuildings,
+  tickUplinks,
   tickProduction,
 } from './production';
 import { setRally, spreadDestinations, tickTraining, trainUnit, untrainUnit } from './training';
@@ -51,6 +52,7 @@ export function stepWorld(world: World, commands: readonly Command[], events: Si
   tickProduction(world, events);
   tickTraining(world, events);
   tickBuildings(world, events);
+  tickUplinks(world, events);
 
   if (world.tick % VISION_INTERVAL === 0) updateVision(world);
   world.tick++;

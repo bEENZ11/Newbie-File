@@ -225,6 +225,26 @@ The enemy starts with a Construction Yard in the south-east and plays by the sam
 
 Shots, cannon fire, explosions, collapsing buildings, order confirmations and build notifications are all synthesised in the browser, so there are no audio files to load or license. Sounds from the fog are silent, and those off-screen are quieter. M mutes.
 
+### The big map, gems and four players
+
+**The map** is 128 by 128 cells, four times the area it was. It has big lakes, each made of several overlapping ovals so they have bays and headlands, along with rocky outcrops and woods. About a tenth of it is water. Every starting corner is kept clear, and a map is only accepted if all the corners in use can be reached from one another.
+
+**Ore** is plentiful: around twenty fields scattered across the map, plus one a short drive from every base.
+
+**Gems** are a second, richer resource, drawn in blue-green. They fill a harvester's hopper at the same rate as ore but are worth twice as much, so a full load of gems pays 1,000 credits against 500 for ore. They only appear in the middle half of the map, away from every corner, so all sides have to come out and compete for them.
+
+**Players.** A game can have two or four players, each starting in their own corner:
+
+| Game | Who plays |
+| --- | --- |
+| 1 v 1 | The player in the north-west against one opponent in the south-east |
+| 2 v 2 | The player and a computer ally in the west, against two opponents in the east |
+| Free for all | Four players, one per corner, every side for itself |
+
+Players on the same team never fire on each other, cannot be ordered to, share everything they can see, and win or lose together. A team is beaten only when every player on it is. Each faction has four shades, so even four players of the same faction can be told apart.
+
+**The satellite uplink.** A Tech Centre starts charging a satellite uplink as soon as it is built. After two and a half minutes it comes online and shows its owner, and their allies, the entire map. It only charges while the base has full power. If the Tech Centre is destroyed or sold the satellite goes dark, and a new one has to charge from the start, though ground already seen stays on the map. The sidebar shows the countdown.
+
 ### Factions and the start menu
 
 There are two sides, Aegis and Dominion.
@@ -252,7 +272,8 @@ An earlier idea gave the factions different defences and an economy bonus. It wa
 A game starts from a menu, where the player chooses:
 
 - **Their faction**, from two cards showing each side's emblem, motto and a line of background.
-- **The opponent's faction.** Choosing the side the opponent already has swaps the two over. Picking the same for both gives a mirror match.
+- **The kind of game:** 1 v 1, 2 v 2 or a four-player free for all.
+- **The opponents' faction.** Choosing the side the opponent already has swaps the two over. Picking the same for both gives a mirror match.
 - **Difficulty.** Easy, Normal or Hard, which sets how soon the computer first attacks (six, four, or two and a half minutes), how often it attacks after that, and how fast its army grows.
 - **Starting credits:** 5,000, 10,000 or 20,000.
 - **Map number.** Left blank for a random map. The same number always gives the same map.

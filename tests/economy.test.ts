@@ -4,6 +4,7 @@ import { Sim } from '../src/sim/sim';
 import {
   BUILDING_DEFS,
   HARVEST_CAPACITY,
+  MAP_H,
   MAP_W,
   cellIndex,
   dockCell,
@@ -197,10 +198,11 @@ describe('refinery docks', () => {
 
   it('must be on the map for a refinery to be placed', () => {
     const sim = withRefinery();
-    const b = addBuilding(sim.world, 'power', 0, 20, 58);
+    // Right at the southern edge, where a dock would fall off the map.
+    const b = addBuilding(sim.world, 'power', 0, 20, MAP_H - 6);
     b.progress = b.total;
-    expect(checkPlacement(sim.world, 0, 'refinery', 22, 61).ok).toBe(false);
-    expect(checkPlacement(sim.world, 0, 'refinery', 22, 57).ok).toBe(true);
+    expect(checkPlacement(sim.world, 0, 'refinery', 22, MAP_H - 3).ok).toBe(false);
+    expect(checkPlacement(sim.world, 0, 'refinery', 22, MAP_H - 7).ok).toBe(true);
   });
 });
 

@@ -1,12 +1,15 @@
 // The build sidebar: credits, power, structures and units.
 
-import { canProduce, missingFor, powerOf } from './sim/production';
+import { canProduce, missingFor, powerOf, uplinkOnline } from './sim/production';
 import type { Sim } from './sim/sim';
 import { canTrain, missingForUnit } from './sim/training';
 import {
   BUILDING_DEFS,
   BUILDING_TYPES,
   FACTION_DEFS,
+  TICK_RATE,
+  UPLINK_TICKS,
+  isActive,
   UNIT_DEFS,
   UNIT_TYPES,
   type BuildingType,
@@ -41,6 +44,9 @@ export class Sidebar {
   private powerFill: HTMLElement;
   private powerText: HTMLElement;
   private powerBox: HTMLElement;
+  private uplinkBox: HTMLElement;
+  private uplinkFill: HTMLElement;
+  private uplinkText: HTMLElement;
   private sellButton: HTMLButtonElement;
   private repairButton: HTMLButtonElement;
   private entries: Entry[] = [];
@@ -58,6 +64,9 @@ export class Sidebar {
     this.powerBox = root.querySelector('#power')!;
     this.powerFill = root.querySelector('#power-fill')!;
     this.powerText = root.querySelector('#power-text')!;
+    this.uplinkBox = root.querySelector('#uplink')!;
+    this.uplinkFill = root.querySelector('#uplink-fill')!;
+    this.uplinkText = root.querySelector('#uplink-text')!;
     this.sellButton = root.querySelector('#sell')!;
     this.repairButton = root.querySelector('#repair')!;
 
@@ -247,6 +256,25 @@ export class Sidebar {
       entry.button.classList.toggle('placing', v.placing);
       setText(entry.status, v.label);
       setText(entry.count, v.count > 1 ? `×${v.count}` : '');
+    }
+
+    // The satellite uplink only appears once there is a Tech Centre to run it.
+    const hasTech = world.buildings.some((b) => b.owner === LOCAL_PLAYER && b.type === 'tech' && isActive(b));
+    this.uplinkBox.hidden = !hasTech;
+    if (hasTech) {
+      const online = uplinkOnline(world, LOCAL_PLAYER);
+      const share = player.uplink / UPLINK_TICKS;
+      this.uplinkFill.style.width = `${share * 100}%`;
+      this.uplinkBox.classList.toggle('online', online);
+      const left = Math.ceil((UPLINK_TICKS - player.uplink) / TICK_RATE);
+      setText(
+        this.uplinkText,
+        online
+          ? 'Online'
+          : power.low
+            ? 'Paused, low power'
+            : `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`,
+      );
     }
 
     // Mark each tab with what is going on behind it, so nothing finishes unnoticed.

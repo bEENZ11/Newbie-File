@@ -2,8 +2,20 @@
 
 import { css, setFactions, palettes } from './render/teams';
 import { DIFFICULTIES, FACTIONS, FACTION_DEFS, UNIT_DEFS, type Difficulty, type Faction } from './sim/types';
+import type { Seat } from './sim/world';
+
+/** How many players, and who is on whose side. */
+export type Mode = 'duel' | 'teams' | 'ffa';
+const MODES: readonly Mode[] = ['duel', 'teams', 'ffa'];
+const MODE_NAMES: Record<Mode, string> = { duel: '1 v 1', teams: '2 v 2', ffa: 'Free for all' };
+const MODE_NOTES: Record<Mode, string> = {
+  duel: 'You against one opponent, in opposite corners',
+  teams: 'You and a computer ally in the west, against two in the east',
+  ffa: 'Four players, one in each corner, every side for itself',
+};
 
 export interface GameOptions {
+  mode: Mode;
   faction: Faction;
   enemy: Faction;
   difficulty: Difficulty;
@@ -28,6 +40,24 @@ export const EMBLEMS: Record<Faction, string> = {
   dominion:
     '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M22 5h20l17 17v20L42 59H22L5 42V22z" fill="currentColor" opacity=".22"/><path d="M22 5h20l17 17v20L42 59H22L5 42V22z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M32 15l5 11 12 1-9 8 3 12-11-6-11 6 3-12-9-8 12-1z" fill="currentColor"/></svg>',
 };
+
+/**
+ * Who sits where. Seat 0 is always the player, in the north-west. Seat 1 is
+ * the far corner, seat 2 the north-east and seat 3 the south-west.
+ */
+export function seatsFor(o: Pick<GameOptions, 'mode' | 'faction' | 'enemy'>): Seat[] {
+  const you: Seat = { faction: o.faction, team: 0, ai: false };
+  const foe = (team: number, faction: Faction = o.enemy): Seat => ({ faction, team, ai: true });
+  if (o.mode === 'teams') {
+    // West against east: your ally holds the south-west corner.
+    return [you, foe(1), foe(1), { faction: o.faction, team: 0, ai: true }];
+  }
+  if (o.mode === 'ffa') {
+    // A mix of both factions, so no two neighbours are quite alike.
+    return [you, foe(1), foe(2, o.faction), foe(3)];
+  }
+  return [you, foe(1)];
+}
 
 /** The units one side has that the other does not, as a readable list. */
 function ownUnits(faction: Faction): string {
@@ -54,7 +84,9 @@ function fromAddress(): GameOptions | null {
   const enemy = q.get('enemy') as Faction | null;
   const difficulty = q.get('difficulty') as Difficulty | null;
   const seed = Number(q.get('seed'));
+  const mode = q.get('mode') as Mode | null;
   return {
+    mode: mode && MODES.includes(mode) ? mode : 'duel',
     faction,
     enemy: enemy && FACTIONS.includes(enemy) ? enemy : otherThan(faction),
     difficulty: difficulty && DIFFICULTIES.includes(difficulty) ? difficulty : 'normal',
@@ -74,6 +106,7 @@ export function chooseOptions(): Promise<GameOptions> {
 
   const last = remembered();
   const state: GameOptions = {
+    mode: last.mode && MODES.includes(last.mode) ? last.mode : 'duel',
     faction: last.faction && FACTIONS.includes(last.faction) ? last.faction : 'aegis',
     enemy: last.enemy && FACTIONS.includes(last.enemy) ? last.enemy : 'dominion',
     difficulty: last.difficulty && DIFFICULTIES.includes(last.difficulty) ? last.difficulty : 'normal',
@@ -83,6 +116,8 @@ export function chooseOptions(): Promise<GameOptions> {
 
   const cards = menu.querySelector('#factions')!;
   const enemyRow = menu.querySelector('#enemy')!;
+  const modeRow = menu.querySelector('#mode')!;
+  const modeNote = menu.querySelector('#mode-note')!;
   const difficultyRow = menu.querySelector('#difficulty')!;
   const creditsRow = menu.querySelector('#credits-choice')!;
   const note = menu.querySelector('#difficulty-note')!;
@@ -111,7 +146,7 @@ export function chooseOptions(): Promise<GameOptions> {
 
   function draw(): void {
     // Colours follow the factions, including the alternate set for a mirror match.
-    setFactions([state.faction, state.enemy]);
+    setFactions(seatsFor(state).map((s) => s.faction));
     cards.replaceChildren(
       ...FACTIONS.map((f) => {
         const def = FACTION_DEFS[f];
@@ -135,6 +170,10 @@ export function chooseOptions(): Promise<GameOptions> {
       }),
     );
     mark(enemyRow, state.enemy);
+    mark(modeRow, state.mode);
+    modeNote.textContent = MODE_NOTES[state.mode];
+    // Preview the colours as they will be in the game, for however many are playing.
+    setFactions(seatsFor(state).map((s) => s.faction));
     mark(difficultyRow, state.difficulty);
     mark(creditsRow, state.credits);
     note.textContent = DIFFICULTY_NOTES[state.difficulty];
@@ -147,6 +186,7 @@ export function chooseOptions(): Promise<GameOptions> {
     return f === state.enemy ? palettes[1].main : f === 'aegis' ? 0x3f86e0 : 0xd8483c;
   }
 
+  choices(modeRow, MODES, (m) => MODE_NAMES[m], (m) => (state.mode = m));
   choices(enemyRow, FACTIONS, (f) => FACTION_DEFS[f].name, (f) => (state.enemy = f));
   choices(difficultyRow, DIFFICULTIES, (d) => DIFFICULTY_NAMES[d], (d) => (state.difficulty = d));
   choices(creditsRow, CREDIT_CHOICES, (c) => c.toLocaleString('en-GB'), (c) => (state.credits = c));

@@ -1,6 +1,6 @@
 import { Sounds } from './audio';
 import { Input } from './input/input';
-import { EMBLEMS, chooseOptions } from './menu';
+import { EMBLEMS, chooseOptions, seatsFor } from './menu';
 import { Minimap } from './minimap';
 import { css, palettes, setFactions } from './render/teams';
 import { loadAssets } from './render/assets';
@@ -31,7 +31,8 @@ await loadAssets();
 
 // Wait on the menu for the player to pick a side, then paint the armies to match.
 const options = await chooseOptions();
-setFactions([options.faction, options.enemy]);
+const seats = seatsFor(options);
+setFactions(seats.map((s) => s.faction));
 document.body.dataset.playing = 'yes';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -50,13 +51,20 @@ window.addEventListener('keydown', (e) => {
 // A skirmish against the computer, on a map with rocks, lakes and woods,
 // set up the way the player asked for on the menu.
 const sim = new Sim(options.seed, {
-  ai: [1],
+  seats,
   terrain: true,
-  factions: [options.faction, options.enemy],
   difficulty: options.difficulty,
   credits: options.credits,
 });
 const foeName = FACTION_DEFS[options.enemy].name;
+// How the hints refer to the opposition, which depends on how many there are.
+const foeText = options.mode === 'duel' ? `${foeName} is` : options.mode === 'teams' ? 'Both enemies are' : 'All three rivals are';
+const whereText =
+  options.mode === 'duel'
+    ? `The ${foeName} base lies in the far south-east corner`
+    : options.mode === 'teams'
+      ? 'Your ally is to the south, and two enemy bases lie to the east'
+      : 'There is a rival in each of the other three corners';
 
 // Show whose side this is at the top of the sidebar.
 const badge = document.getElementById('badge')!;
@@ -114,6 +122,8 @@ function handleEvents(now: number): void {
     if (ev.type === 'shot') {
       const sound = ev.kind === 'bullet' ? 'rifle' : ev.kind === 'flame' ? 'flame' : 'cannon';
       sounds.play(sound, loudness(ev.fromX / SUB, ev.fromY / SUB));
+    } else if (ev.type === 'uplinkOnline' && ev.player === LOCAL_PLAYER) {
+      sounds.play('ready');
     } else if (ev.type === 'sabotaged') {
       sounds.play('blast');
     } else if (ev.type === 'captured') {
@@ -133,7 +143,7 @@ function handleEvents(now: number): void {
       sounds.play('refused');
     }
     if (ev.type === 'gameOver') {
-      const won = ev.winner === LOCAL_PLAYER;
+      const won = ev.winner === sim.world.players[LOCAL_PLAYER].team;
       sounds.play(won ? 'victory' : 'defeat');
       againEl.style.display = 'block';
       bannerEl.textContent = won ? 'Victory' : 'Defeat';
@@ -160,7 +170,7 @@ function currentHint(): string {
   const prod = player.production;
 
   if (world.winner !== -1) {
-    return world.winner === LOCAL_PLAYER ? `${foeName} is defeated` : `${foeName} has wiped out your base`;
+    return world.winner === player.team ? `${foeText} defeated` : 'Your side has been wiped out';
   }
 
   if (ui.placing) {
@@ -209,7 +219,7 @@ function currentHint(): string {
   }
   if (prod) return `Building ${BUILDING_DEFS[prod.type].name}. Right-click it to put it on hold`;
   if (powerOf(world, LOCAL_PLAYER).low) return 'Low power is slowing production. Build a Power Plant';
-  return `The ${foeName} base lies to the south-east, and it will come for you. Build defences and an army`;
+  return `${whereText}, and they will come for you. Build defences and an army`;
 }
 
 function updateHud(): void {

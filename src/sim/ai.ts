@@ -21,6 +21,7 @@ import {
   MAP_W,
   UNIT_DEFS,
   cellIndex,
+  hostile,
   inBounds,
   isActive,
   isWall,
@@ -155,7 +156,7 @@ function nearestEnemy(world: World, player: number, x: number, y: number): numbe
   let best = 0;
   let bestD = 0;
   for (const b of world.buildings) {
-    if (b.owner === player || isWall(b.type)) continue;
+    if (!hostile(world, b.owner, player) || isWall(b.type)) continue;
     const d = (b.cx - x) * (b.cx - x) + (b.cy - y) * (b.cy - y);
     if (best === 0 || d < bestD) {
       best = b.id;
@@ -164,7 +165,7 @@ function nearestEnemy(world: World, player: number, x: number, y: number): numbe
   }
   if (best !== 0) return best;
   for (const u of world.units) {
-    if (u.owner === player) continue;
+    if (!hostile(world, u.owner, player)) continue;
     const d = (cellX(u.cell) - x) * (cellX(u.cell) - x) + (cellY(u.cell) - y) * (cellY(u.cell) - y);
     if (best === 0 || d < bestD) {
       best = u.id;
