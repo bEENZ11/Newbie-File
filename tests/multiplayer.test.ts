@@ -309,9 +309,12 @@ describe('four computers', () => {
         }
       }
     });
-    for (let p = 0; p < 4; p++) {
-      const got = world.buildings.filter((b) => b.owner === p).length + (world.winner !== -1 ? 1 : 0);
-      expect(got).toBeGreaterThan(0);
+    // One player may be knocked out while their ally fights on, so check by team:
+    // until the game is decided, each side must still have something standing.
+    if (world.winner === -1) {
+      for (const team of [0, 1]) {
+        expect(world.buildings.some((b) => world.players[b.owner].team === team)).toBe(true);
+      }
     }
     expect(world.ai.reduce((a, s) => a + (s ? s.wave : 0), 0)).toBeGreaterThan(0);
   });
