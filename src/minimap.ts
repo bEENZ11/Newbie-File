@@ -101,13 +101,22 @@ export class Minimap {
     const ui = this.ui;
     const halfW = ui.viewW / ui.zoom / 2;
     const halfD = ui.viewH / ui.zoom / SIN_PITCH / 2;
+    // Its four corners on the ground, which form a tilted box when the view is turned.
+    const rx = Math.cos(ui.yaw);
+    const rz = -Math.sin(ui.yaw);
+    const fx = Math.sin(ui.yaw);
+    const fz = Math.cos(ui.yaw);
+    const corner = (a: number, b: number): [number, number] => [
+      ((ui.camX + rx * halfW * a + fx * halfD * b) / MAP_W) * w,
+      ((ui.camZ + rz * halfW * a + fz * halfD * b) / MAP_H) * h,
+    ];
     g.strokeStyle = '#ffffff';
     g.lineWidth = 1;
-    g.strokeRect(
-      Math.round(((ui.camX - halfW) / MAP_W) * w) + 0.5,
-      Math.round(((ui.camZ - halfD) / MAP_H) * h) + 0.5,
-      Math.round(((halfW * 2) / MAP_W) * w),
-      Math.round(((halfD * 2) / MAP_H) * h),
+    g.beginPath();
+    [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)].forEach(([x, y], i) =>
+      i === 0 ? g.moveTo(x, y) : g.lineTo(x, y),
     );
+    g.closePath();
+    g.stroke();
   }
 }

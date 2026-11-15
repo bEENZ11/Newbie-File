@@ -59,6 +59,12 @@ function loudness(x: number, z: number): number {
   return d <= 1 ? 1 : Math.max(0.15, 1 / (d * d));
 }
 const ui = createUi();
+// Press V to flip between the diamond and straight-on views. The choice is remembered.
+try {
+  if (localStorage.getItem('view') === 'straight') ui.yaw = 0;
+} catch {
+  // No storage available, so start with the default view.
+}
 const renderer = new Renderer(canvas, sim.world);
 const input = new Input(canvas, sim, ui, renderer);
 const sidebar = new Sidebar(document.getElementById('sidebar')!, sim, ui, renderIcons());

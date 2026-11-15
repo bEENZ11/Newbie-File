@@ -12,7 +12,7 @@ import {
   type Unit,
   type UnitType,
 } from '../src/sim/types';
-import { START_CX, START_CY, addBuilding } from '../src/sim/world';
+import { START_CX, START_CY, addBuilding, spawnUnit } from '../src/sim/world';
 
 const YARD_X = START_CX - 1;
 const YARD_Y = START_CY - 1;
@@ -249,6 +249,47 @@ describe('group movement', () => {
     sim.issue({ type: 'move', player: 1, unitIds: [tank.id], cx: 40, cy: 30 });
     run(sim, 50);
     expect(tank.cell).toBe(cell);
+  });
+});
+
+describe('crowds', () => {
+  it('let a unit out when it is completely surrounded by parked ones', () => {
+    const sim = new Sim(1);
+    const world = sim.world;
+    world.ore.fill(0);
+    const middle = spawnUnit(world, 'tank', 0, 30, 30);
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx !== 0 || dy !== 0) spawnUnit(world, 'tank', 0, 30 + dx, 30 + dy);
+      }
+    }
+    sim.issue({ type: 'move', player: 0, unitIds: [middle.id], cx: 42, cy: 30 });
+    run(sim, 500, () => {
+      const held = new Set<number>();
+      for (const u of world.units) {
+        for (const c of u.stepTo === -1 ? [u.cell] : [u.cell, u.stepTo]) {
+          expect(held.has(c)).toBe(false);
+          held.add(c);
+        }
+      }
+    });
+    expect(xy(middle.cell)).toEqual([42, 30]);
+  });
+
+  it('let a unit out of a pocket walled in by buildings and its own side', () => {
+    const sim = new Sim(1);
+    const world = sim.world;
+    world.ore.fill(0);
+    // A dead end three cells deep, with two tanks parked across its mouth.
+    grant(sim, 'factory', 27, 28);
+    grant(sim, 'factory', 31, 28);
+    grant(sim, 'power', 30, 26);
+    const trapped = spawnUnit(world, 'tank', 0, 30, 28);
+    spawnUnit(world, 'tank', 0, 30, 29);
+    spawnUnit(world, 'tank', 0, 30, 30);
+    sim.issue({ type: 'move', player: 0, unitIds: [trapped.id], cx: 30, cy: 40 });
+    run(sim, 600);
+    expect(xy(trapped.cell)).toEqual([30, 40]);
   });
 });
 

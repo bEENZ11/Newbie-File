@@ -7,6 +7,8 @@ export const LOCAL_PLAYER = 0;
 
 export const ZOOM_MIN = 32;
 export const ZOOM_MAX = 96;
+/** The diamond view: the camera sits to the south-east, so two sides of every building show. */
+export const DIAMOND_YAW = Math.PI / 4;
 
 export interface UiState {
   /** The ground point at the centre of the screen, in cells. */
@@ -14,6 +16,11 @@ export interface UiState {
   camZ: number;
   /** Pixels per cell, measured across the screen. */
   zoom: number;
+  /**
+   * Which way the camera is turned, in radians. Zero looks straight north.
+   * A quarter turn less than that gives the diamond view, looking north-west.
+   */
+  yaw: number;
   viewW: number;
   viewH: number;
   selectedUnits: Set<number>;
@@ -45,6 +52,7 @@ export function createUi(): UiState {
     camX: 0,
     camZ: 0,
     zoom: 60,
+    yaw: DIAMOND_YAW,
     viewW: 0,
     viewH: 0,
     selectedUnits: new Set(),

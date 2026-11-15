@@ -132,6 +132,7 @@ Total supply is compared with total demand. If demand is higher, the power bar t
 | Scroll the camera | Arrow keys, screen edge, or click the radar |
 | Repair or sell a building | The Repair or Sell button, then click the building |
 | Mute sound | M |
+| Flip between the diamond and straight-on views | V |
 
 ### Starting numbers
 
@@ -151,7 +152,7 @@ Starting credits: 5000. A full harvester load is worth 500.
 
 ## Art
 
-The game is rendered in 3D. The camera is fixed, looking north and tilted down at the ground, with mouse-wheel zoom but no rotation.
+The game is rendered in 3D. The camera looks down at the ground from a raised angle, with mouse-wheel zoom. By default it uses a diamond view from the south-east, which shows two sides of every building. V flips to a straight-on view looking north, and the choice is remembered.
 
 The ground is painted procedurally, with grass that varies between lush and dry, forest floor, bare rock and lakes with sandy shores, all blended across cell boundaries. Lighting uses a low warm sun with soft shadows and filmic tone mapping. Chimneys smoke, cooling towers steam, damaged buildings burn, explosions leave scorch marks, and tank and turret guns swing round to track their targets. The build buttons show portraits rendered from the game's own models.
 

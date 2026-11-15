@@ -2,6 +2,7 @@
 // the cell it is stepping into, so no two units ever share a cell.
 
 import { findPath, nearestFree } from './pathfinding';
+import { freeCellNear } from './world';
 import {
   BLOCKED_PATIENCE,
   MAP_H,
@@ -80,9 +81,21 @@ function goRound(world: World, unit: Unit): void {
   }
   const gx = goal % MAP_W;
   const route = findPath(blocked, MAP_W, MAP_H, unit.cell, gx, (goal - gx) / MAP_W);
-  // No way round means it is boxed in for now. Keep the old route and wait
-  // for the crowd to clear.
-  if (route.length > 0) unit.path = route;
+  if (route.length > 0) {
+    unit.path = route;
+    return;
+  }
+  // No way round means it is boxed in. If the unit in the way is one of ours
+  // and is just standing there, ask it to shuffle aside. It will do the same
+  // to whoever is blocking it in turn, so a packed crowd opens up from the
+  // outside in.
+  const holder = world.units.find((u) => u.id === world.occupied[unit.path[0]]);
+  if (!holder || holder.owner !== unit.owner || !isSettled(holder) || holder.attack !== 0) return;
+  if (holder.type === 'harvester' && holder.job !== 'manual' && holder.job !== 'idle') return;
+  const hx = holder.cell % MAP_W;
+  const spot = freeCellNear(world, hx, (holder.cell - hx) / MAP_W);
+  const sx = spot % MAP_W;
+  setDestination(world, holder, sx, (spot - sx) / MAP_W);
 }
 
 export function moveUnit(world: World, unit: Unit): void {

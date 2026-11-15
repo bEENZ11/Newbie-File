@@ -2,7 +2,7 @@ import { SIN_PITCH, type Renderer } from '../render/renderer';
 import type { Sim } from '../sim/sim';
 import { checkPlacement } from '../sim/production';
 import { BUILDING_DEFS, MAP_H, MAP_W, SUB, UNIT_DEFS, type Unit } from '../sim/types';
-import { LOCAL_PLAYER, ZOOM_MAX, ZOOM_MIN, placementOrigin, type UiState } from '../ui';
+import { DIAMOND_YAW, LOCAL_PLAYER, ZOOM_MAX, ZOOM_MIN, placementOrigin, type UiState } from '../ui';
 
 const DRAG_THRESHOLD = 5;
 const EDGE = 14;
@@ -57,14 +57,23 @@ export class Input {
       if (ui.mouseY > ui.viewH - EDGE) dz += 1;
     }
     const cellsPerSecond = CAMERA_SPEED / ui.zoom;
-    ui.camX += Math.sign(dx) * cellsPerSecond * dt;
-    ui.camZ += Math.sign(dz) * cellsPerSecond * dt;
+    // Scrolling follows the screen, so it has to allow for how the view is turned.
+    const sx = Math.sign(dx) * cellsPerSecond * dt;
+    const sz = Math.sign(dz) * cellsPerSecond * dt;
+    ui.camX += sx * Math.cos(ui.yaw) + sz * Math.sin(ui.yaw);
+    ui.camZ += -sx * Math.sin(ui.yaw) + sz * Math.cos(ui.yaw);
     this.clampCamera();
   }
 
   /** Keeps the view inside the map, or centres the map if it is smaller. */
   clampCamera(): void {
     const ui = this.ui;
+    if (ui.yaw !== 0) {
+      // Turned views show a diamond of ground, so simply keep the centre on the map.
+      ui.camX = Math.min(MAP_W - 1, Math.max(1, ui.camX));
+      ui.camZ = Math.min(MAP_H - 1, Math.max(1, ui.camZ));
+      return;
+    }
     const halfW = ui.viewW / ui.zoom / 2;
     // The tilt squashes the ground vertically, so more of it fits on screen.
     const halfD = ui.viewH / ui.zoom / SIN_PITCH / 2;
@@ -290,6 +299,15 @@ export class Input {
           this.sim.issue({ type: 'deploy', player: LOCAL_PLAYER, unitId: u.id });
         }
       }
+    } else if (e.key === 'v' || e.key === 'V') {
+      // Flip between the diamond view and the straight-on view.
+      this.ui.yaw = this.ui.yaw === 0 ? DIAMOND_YAW : 0;
+      try {
+        localStorage.setItem('view', this.ui.yaw === 0 ? 'straight' : 'diamond');
+      } catch {
+        // Storage can be unavailable in private windows. The choice just won't be remembered.
+      }
+      this.clampCamera();
     } else if (/^Digit[0-9]$/.test(e.code)) {
       this.controlGroup(Number(e.code.slice(5)), e.ctrlKey || e.metaKey || e.shiftKey);
       e.preventDefault();

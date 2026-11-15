@@ -293,10 +293,11 @@ export class Renderer {
     cam.right = ui.viewW / ui.zoom / 2;
     cam.top = ui.viewH / ui.zoom / 2;
     cam.bottom = -ui.viewH / ui.zoom / 2;
+    // The camera circles the point it is looking at as the view is turned.
     cam.position.set(
-      ui.camX,
+      ui.camX + Math.sin(ui.yaw) * COS_PITCH * CAMERA_DISTANCE,
       SIN_PITCH * CAMERA_DISTANCE,
-      ui.camZ + COS_PITCH * CAMERA_DISTANCE,
+      ui.camZ + Math.cos(ui.yaw) * COS_PITCH * CAMERA_DISTANCE,
     );
     cam.lookAt(ui.camX, 0, ui.camZ);
     cam.updateProjectionMatrix();
