@@ -65,6 +65,11 @@ export interface Scenario {
   difficulty?: Difficulty;
   /** Credits each player starts with, if not the usual amount. */
   credits?: number;
+  /**
+   * Starts every seat with a Pioneer in its corner and nothing else, so that
+   * all players begin on equal terms. Used for games between people.
+   */
+  pioneers?: boolean;
 }
 
 /**
@@ -121,6 +126,12 @@ export function createWorld(seed: number, scenario: Scenario = {}): World {
   if (scenario.terrain) generateTerrain(world, seats.length);
   scatterOre(world);
   spawnUnit(world, 'pioneer', 0, START_CX, START_CY);
+  if (scenario.pioneers) {
+    for (let i = 1; i < seats.length; i++) spawnUnit(world, 'pioneer', i, BASES[i].x, BASES[i].y);
+    for (let i = 0; i < seats.length; i++) homeOre(world, BASES[i]);
+    updateVision(world);
+    return world;
+  }
   if (scenario.outpost) addOutpost(world);
   const rivals = seats.map((_, i) => i).filter((i) => i > 0 && (scenario.seats !== undefined || seats[i].ai));
   for (const i of rivals) addRivalBase(world, i);

@@ -203,6 +203,74 @@
       #start:hover {
         filter: brightness(1.12);
       }
+      #local[hidden],
+      #lobby[hidden] {
+        display: none;
+      }
+      #online {
+        margin-top: 22px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+      }
+      #online #code {
+        flex: 0 0 90px;
+        margin: 0;
+        text-align: center;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+      }
+      #online #join {
+        flex: 0 0 80px;
+      }
+      #lobby {
+        margin-top: 22px;
+      }
+      #lobby-code {
+        font-size: 46px;
+        font-weight: 800;
+        letter-spacing: 0.3em;
+        font-variant-numeric: tabular-nums;
+      }
+      #lobby-players {
+        margin: 16px 0;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      .seat {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 14px;
+        font-size: 14px;
+      }
+      .seat + .seat {
+        border-top: 1px solid var(--line);
+      }
+      .seat .side {
+        color: var(--muted);
+      }
+      .choice button:disabled {
+        opacity: 0.55;
+        cursor: default;
+      }
+      #lobby-start {
+        display: block;
+        width: 100%;
+        margin-top: 22px;
+        padding: 14px;
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: #fff;
+        background: var(--team, #3f86e0);
+        border: 0;
+        border-radius: 7px;
+        cursor: pointer;
+      }
+      #lobby-start:disabled {
+        background: #2a323a;
+        color: var(--muted);
+        cursor: default;
+      }
       #menu .keys {
         margin: 16px 0 0;
         text-align: center;
@@ -607,6 +675,7 @@
         <h1>Aegis <span>and</span> Dominion</h1>
         <p class="strap">A battle for control of the frontier. Choose your side.</p>
         <div id="factions"></div>
+        <div id="local">
         <div class="settings">
           <div class="wide">
             <div class="label">Game</div>
@@ -633,6 +702,25 @@
           </div>
         </div>
         <button id="start">Start</button>
+          <div id="online">
+            <div class="label">Play with friends</div>
+            <div class="choice">
+              <button id="host">Create an online game</button>
+              <input id="code" maxlength="4" placeholder="Code" autocomplete="off" />
+              <button id="join">Join</button>
+            </div>
+            <div id="online-note" class="hintline"></div>
+          </div>
+        </div>
+        <div id="lobby" hidden>
+          <div class="label">Game code</div>
+          <div id="lobby-code"></div>
+          <div id="lobby-note" class="hintline"></div>
+          <div id="lobby-players"></div>
+          <div class="label">Game</div>
+          <div id="lobby-mode" class="choice"></div>
+          <button id="lobby-start">Start the game</button>
+        </div>
         <p class="keys">
           Left-click selects. Right-click moves or attacks. Arrow keys or the screen edge scroll, and the mouse wheel
           zooms. V turns the view, and M mutes the sound.

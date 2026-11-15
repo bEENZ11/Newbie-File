@@ -3,7 +3,12 @@
 import { BUILDING_DEFS, type BuildingType, type World } from './sim/types';
 
 /** The player sitting at this screen. */
-export const LOCAL_PLAYER = 0;
+export let LOCAL_PLAYER = 0;
+
+/** Says which seat the person at this screen is playing. Call before the game is set up. */
+export function setLocalPlayer(seat: number): void {
+  LOCAL_PLAYER = seat;
+}
 
 export const ZOOM_MIN = 32;
 export const ZOOM_MAX = 96;

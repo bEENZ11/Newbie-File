@@ -245,6 +245,26 @@ Players on the same team never fire on each other, cannot be ordered to, share e
 
 **The satellite uplink.** A Tech Centre starts charging a satellite uplink as soon as it is built. After two and a half minutes it comes online and shows its owner, and their allies, the entire map. It only charges while the base has full power. If the Tech Centre is destroyed or sold the satellite goes dark, and a new one has to charge from the start, though ground already seen stays on the map. The sidebar shows the countdown.
 
+### Playing online
+
+Up to four people can play together. One creates a game from the menu and is given a four-letter code, and the others type it in to join. In the lobby each player picks a faction, and the host picks the kind of game and starts it. Any seat nobody takes is played by the computer.
+
+**How it works.** The game is not run on a server. Every player's machine runs the same simulation, and the only thing sent over the network is each player's orders. A small room server gathers the orders and sends them back to everyone, in the same order, ten times a second. Because the simulation always gives the same result from the same orders, the games stay identical. This keeps the server tiny and cheap, and means the amount of data sent does not grow with the size of the armies.
+
+- **Fair starts.** Online, every player begins with just a Pioneer in their own corner.
+- **No giving orders for someone else.** The server stamps every order with the seat it came from, whatever the sender claims.
+- **Falling behind.** A slow machine plays through any waiting turns straight away to catch up.
+- **Drift detection.** Every two seconds each machine reports a checksum of its game. If two ever differ, all players are told the match can no longer continue fairly.
+- **Leaving.** If a player drops out, the others are told. Their units and buildings stay where they are.
+
+**The server** is `server/room.ts`, which holds the lobby and the relay and knows nothing about where it runs. Two thin wrappers put it online: `server/worker.ts` for Cloudflare, using one Durable Object per room, and `server/dev.ts` for running on one machine.
+
+To try it locally, run `npm run server` in one terminal and `npm run dev` in another, then open the game with `?server=ws://localhost:8787` on the end of its address in two browser windows.
+
+To put it online, with a Cloudflare account: `npm run build`, then `npx wrangler deploy`. The Worker serves the game itself as well as the rooms, so there is nothing else to host.
+
+**Not yet done:** rejoining a game after a disconnection, having the computer take over a seat when someone leaves, choosing teams or seats in the lobby, player names, and chat. The Cloudflare wrapper is type-checked but has not been run, since deploying needs an account.
+
 ### Factions and the start menu
 
 There are two sides, Aegis and Dominion.
@@ -314,6 +334,10 @@ Rules worth knowing:
 - A captured building works for its new owner straight away, and taking an enemy's last building wins the game.
 - The sidebar has a tab each for structures, infantry and vehicles. A dot on a tab shows that something behind it is building or ready.
 - The computer builds a Radar Station after its first attack and a Tech Centre after its second, and mixes rocket soldiers, grenadiers, scout cars, artillery and heavy tanks into its army. It does not yet use engineers, walls or depots.
+
+### Known problem: the computer cannot finish a game on the big map
+
+Left to play itself on the 128 by 128 map, the computer often reaches a stalemate. Each side's army tops out at about 22 units while each base has five turrets and a garrison, so attacks arrive in small waves and are beaten off. One side was seen sitting on 60,000 unspent credits. The likely fixes are to let the army grow with the bank balance, send bigger waves as a game goes on, and bring artillery or flame tanks against turrets on purpose. Until this is fixed, computer-versus-computer games cannot be used to judge faction balance on this map.
 
 ### Still to come
 

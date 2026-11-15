@@ -28,6 +28,7 @@ Then open the address it prints. Add `?seed=123` to the address to get the same 
 - A 128 by 128 map with big lakes, plentiful ore and richer gem fields in the middle.
 - Games for two or four players: 1 v 1, 2 v 2 with a computer ally, or a free for all.
 - A satellite uplink from the Tech Centre that reveals the whole map.
+- Online play for up to four people, joined by a four-letter code.
 - A wider roster: rocket soldiers, grenadiers, engineers that capture buildings, scout cars, artillery and heavy tanks, plus a Radar Station, Tech Centre, Service Depot and walls.
 - A deterministic simulation running at 20 ticks a second, separate from drawing and input.
 
@@ -36,9 +37,12 @@ Then open the address it prints. Add `?seed=123` to the address to get the same 
 - `npm run dev` starts the game locally.
 - `npm test` runs the simulation tests.
 - `npm run build` type-checks and makes a production build in `dist`.
+- `npm run server` starts a local room server for online play. Open the game with `?server=ws://localhost:8787` on the end of its address.
+- `npx wrangler deploy`, after a build, puts the game and its room server on Cloudflare.
 
 ## Layout
 
 - `src/sim` is the game itself. It uses whole numbers only and never touches the browser, so the same commands always produce the same game.
 - `src/render` draws the current state in 3D with Three.js. The placeholder models are in `src/render/models.ts`.
 - `src/input` turns mouse and keyboard input into commands.
+- `src/net` is the browser's side of online play, and `server` is the room server.

@@ -1,6 +1,7 @@
 import { Sounds } from './audio';
 import { Input } from './input/input';
 import { EMBLEMS, chooseOptions, seatsFor } from './menu';
+import { TURN_TICKS } from './net/protocol';
 import { Minimap } from './minimap';
 import { css, palettes, setFactions } from './render/teams';
 import { loadAssets } from './render/assets';
@@ -21,8 +22,8 @@ import {
   type BuildingType,
   type UnitType,
 } from './sim/types';
-import { START_CX, START_CY, addBuilding, spawnUnit } from './sim/world';
-import { LOCAL_PLAYER, createUi, placementOrigin } from './ui';
+import { BASES, addBuilding, spawnUnit } from './sim/world';
+import { LOCAL_PLAYER, createUi, placementOrigin, setLocalPlayer } from './ui';
 
 const TICK_MS = 1000 / TICK_RATE;
 
@@ -31,7 +32,10 @@ await loadAssets();
 
 // Wait on the menu for the player to pick a side, then paint the armies to match.
 const options = await chooseOptions();
-const seats = seatsFor(options);
+// In a game against other people the room decides who sits where. Otherwise the menu does.
+const online = options.online;
+const seats = online ? online.info.seats : seatsFor(options);
+if (online) setLocalPlayer(online.you);
 setFactions(seats.map((s) => s.faction));
 document.body.dataset.playing = 'yes';
 
@@ -53,14 +57,17 @@ window.addEventListener('keydown', (e) => {
 const sim = new Sim(options.seed, {
   seats,
   terrain: true,
+  // Against other people, everyone starts alike, with just a Pioneer.
+  pioneers: online !== undefined,
   difficulty: options.difficulty,
   credits: options.credits,
 });
 const foeName = FACTION_DEFS[options.enemy].name;
 // How the hints refer to the opposition, which depends on how many there are.
 const foeText = options.mode === 'duel' ? `${foeName} is` : options.mode === 'teams' ? 'Both enemies are' : 'All three rivals are';
-const whereText =
-  options.mode === 'duel'
+const whereText = online
+  ? 'Your rivals start in the other corners'
+  : options.mode === 'duel'
     ? `The ${foeName} base lies in the far south-east corner`
     : options.mode === 'teams'
       ? 'Your ally is to the south, and two enemy bases lie to the east'
@@ -76,7 +83,10 @@ const sounds = new Sounds();
 // A small blip confirms each order as it is given.
 const issue = sim.issue.bind(sim);
 sim.issue = (cmd) => {
-  issue(cmd);
+  // Online, an order goes to the room and takes effect when it comes back in a turn,
+  // for every player at once. On its own, the game applies it straight away.
+  if (online) online.client.order(cmd);
+  else issue(cmd);
   if (cmd.type === 'move' || cmd.type === 'attack' || cmd.type === 'rally') sounds.play('order');
   else if (cmd.type !== 'place') sounds.play('click');
 };
@@ -112,8 +122,8 @@ function resize(): void {
 }
 window.addEventListener('resize', resize);
 renderer.resize(ui);
-ui.camX = START_CX + 0.5;
-ui.camZ = START_CY + 0.5;
+ui.camX = BASES[LOCAL_PLAYER].x + 0.5;
+ui.camZ = BASES[LOCAL_PLAYER].y + 0.5;
 input.clampCamera();
 
 function handleEvents(now: number): void {
@@ -169,6 +179,8 @@ function currentHint(): string {
   const yard = world.buildings.find((b) => b.type === 'conyard' && b.owner === LOCAL_PLAYER);
   const prod = player.production;
 
+  if (online?.client.desynced) return 'The players\' games have drifted apart. This match cannot continue fairly';
+  if (online?.client.closed) return 'The connection to the game was lost';
   if (world.winner !== -1) {
     return world.winner === player.team ? `${foeText} defeated` : 'Your side has been wiped out';
   }
@@ -276,8 +288,23 @@ let acc = 0;
 function frame(now: number): void {
   const dt = Math.min(250, now - last);
   last = now;
-  acc = debug.paused ? 0 : acc + dt;
+  acc = debug.paused && !online ? 0 : acc + dt;
+  // Online, the room keeps time for everyone. If turns are waiting, this machine is behind,
+  // so play them straight away, up to a few seconds' worth in one go, instead of at its own pace.
+  if (online) acc = Math.max(acc, Math.min(online.client.backlog * TURN_TICKS, 80) * TICK_MS);
   while (acc >= TICK_MS) {
+    if (online) {
+      const tick = sim.world.tick;
+      // Every machine advances in step. If the next turn has not arrived yet, wait for it.
+      if (!online.client.ready(tick)) {
+        acc = Math.min(acc, TICK_MS);
+        break;
+      }
+      if (tick % TURN_TICKS === 0) {
+        for (const cmd of online.client.take(tick)) issue(cmd);
+        online.client.report(tick, () => sim.hash());
+      }
+    }
     sim.step();
     handleEvents(now);
     acc -= TICK_MS;
@@ -296,4 +323,4 @@ function frame(now: number): void {
 requestAnimationFrame(frame);
 
 // Handy for poking at the game from the browser console.
-Object.assign(window, { game: { sim, ui, renderer, debug } });
+Object.assign(window, { game: { sim, ui, renderer, debug, online } });

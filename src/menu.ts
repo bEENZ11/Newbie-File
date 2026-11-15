@@ -1,5 +1,7 @@
 // The screen shown before a game starts, for choosing a side and the settings.
 
+import { RoomClient, type Lobby } from './net/client';
+import type { StartInfo } from './net/protocol';
 import { css, setFactions, palettes } from './render/teams';
 import { DIFFICULTIES, FACTIONS, FACTION_DEFS, UNIT_DEFS, type Difficulty, type Faction } from './sim/types';
 import type { Seat } from './sim/world';
@@ -21,6 +23,8 @@ export interface GameOptions {
   difficulty: Difficulty;
   credits: number;
   seed: number;
+  /** Set for a game against other people: the room, which seat is ours, and what the room decided. */
+  online?: { client: RoomClient; you: number; info: StartInfo };
 }
 
 const CREDIT_CHOICES = [5000, 10000, 20000];
@@ -193,6 +197,86 @@ export function chooseOptions(): Promise<GameOptions> {
   draw();
 
   return new Promise((resolve) => {
+    // ---- Playing online: create a room or join one, then wait in its lobby for the host to start.
+    const local = menu.querySelector<HTMLElement>('#local')!;
+    const lobbyBox = menu.querySelector<HTMLElement>('#lobby')!;
+    const onlineNote = menu.querySelector<HTMLElement>('#online-note')!;
+    const codeInput = menu.querySelector<HTMLInputElement>('#code')!;
+    let client: RoomClient | null = null;
+
+    const showLobby = (lobby: Lobby): void => {
+      local.hidden = true;
+      lobbyBox.hidden = false;
+      const mine = lobby.players.find((p) => p.seat === lobby.you)!;
+      state.faction = mine.faction;
+      draw();
+      lobbyBox.querySelector('#lobby-code')!.textContent = lobby.code;
+      lobbyBox.querySelector('#lobby-players')!.replaceChildren(
+        ...lobby.players.map((p) => {
+          const row = document.createElement('div');
+          row.className = 'seat';
+          row.innerHTML =
+            `<span class="who">Player ${p.seat + 1}${p.seat === lobby.you ? ' (you)' : ''}${p.host ? ', host' : ''}</span>` +
+            `<span class="side">${FACTION_DEFS[p.faction].name}</span>`;
+          return row;
+        }),
+      );
+      const row = lobbyBox.querySelector('#lobby-mode')!;
+      choices(row, MODES, (m) => MODE_NAMES[m], (m) => client?.chooseMode(m));
+      mark(row, lobby.mode);
+      for (const b of row.querySelectorAll<HTMLButtonElement>('button')) b.disabled = !mine.host;
+      const go = lobbyBox.querySelector<HTMLButtonElement>('#lobby-start')!;
+      go.disabled = !mine.host;
+      go.textContent = mine.host ? 'Start the game' : 'Waiting for the host to start';
+      go.style.setProperty('--team', css(palettes[0].main));
+      const filled = lobby.mode === 'duel' && lobby.players.length <= 2 ? 2 : 4;
+      const spare = filled - lobby.players.length;
+      lobbyBox.querySelector('#lobby-note')!.textContent =
+        `Share the code with your friends. ${spare > 0 ? `The computer will take the other ${spare === 1 ? 'seat' : `${spare} seats`}.` : 'Every seat is taken.'}`;
+    };
+
+    const enter = (code: string): void => {
+      onlineNote.textContent = 'Connecting';
+      client = new RoomClient(code);
+      client.onLobby = showLobby;
+      client.onError = (message) => {
+        // Back to the main menu, with the reason.
+        onlineNote.textContent = message;
+        local.hidden = false;
+        lobbyBox.hidden = true;
+        client = null;
+      };
+      const room = client;
+      client.onStart = (you, info) => {
+        room.onError = () => {};
+        menu.remove();
+        const foe = info.seats.find((seat, i) => i !== you && seat.team !== info.seats[you].team);
+        resolve({
+          mode: info.mode,
+          faction: info.seats[you].faction,
+          enemy: foe?.faction ?? otherThan(info.seats[you].faction),
+          difficulty: info.difficulty,
+          credits: 5000,
+          seed: info.seed,
+          online: { client: room, you, info },
+        });
+      };
+    };
+
+    menu.querySelector('#host')!.addEventListener('click', () => {
+      // Four letters, easy to read out, with none that look like numbers.
+      const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+      enter(Array.from({ length: 4 }, () => letters[Math.floor(Math.random() * letters.length)]).join(''));
+    });
+    menu.querySelector('#join')!.addEventListener('click', () => {
+      const code = codeInput.value.trim().toUpperCase();
+      if (/^[A-Z]{4}$/.test(code)) enter(code);
+      else onlineNote.textContent = 'A game code is four letters';
+    });
+    lobbyBox.querySelector('#lobby-start')!.addEventListener('click', () => client?.start());
+    // In a lobby, choosing a faction card tells the room.
+    cards.addEventListener('click', () => client?.chooseFaction(state.faction));
+
     start.addEventListener('click', () => {
       const typed = Number(seedInput.value);
       state.seed = seedInput.value.trim() !== '' && Number.isInteger(typed) && typed !== 0 ? typed : Date.now() & 0x7fffffff;
