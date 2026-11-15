@@ -141,9 +141,15 @@ function fire(world: World, unit: Unit, t: Target, events: SimEvent[]): void {
 }
 
 export function tickCombat(world: World, events: SimEvent[]): void {
+  // Everyone alive at the start of the tick gets to fire, even if they are hit
+  // before their turn comes round. Otherwise whoever is first in the list would
+  // have an edge, which in multiplayer would mean one player always shot first.
+  const standing = new Set<number>();
+  for (const unit of world.units) if (unit.hp > 0) standing.add(unit.id);
+
   for (const unit of world.units) {
     const weapon = UNIT_DEFS[unit.type].weapon;
-    if (!weapon || unit.hp <= 0) continue;
+    if (!weapon || !standing.has(unit.id)) continue;
     if (unit.cooldown > 0) unit.cooldown--;
     const range2 = weapon.range * weapon.range;
 

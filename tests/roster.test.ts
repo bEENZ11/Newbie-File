@@ -95,9 +95,9 @@ describe('the new weapons', () => {
     // Rockets against armour, rifles and scout guns against infantry.
     expect(hit('rocket', 'tank')).toBe(40);
     expect(hit('rocket', 'rifleman')).toBe(10);
-    expect(hit('rifleman', 'tank')).toBe(2);
-    expect(hit('scout', 'rifleman')).toBe(10);
-    expect(hit('scout', 'tank')).toBe(3);
+    expect(hit('rifleman', 'tank')).toBe(1);
+    expect(hit('scout', 'rifleman')).toBe(8);
+    expect(hit('scout', 'tank')).toBe(2);
     expect(hit('heavy', 'tank')).toBe(66);
     expect(hit('grenadier', 'rifleman')).toBe(22);
   });

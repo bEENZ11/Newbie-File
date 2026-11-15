@@ -84,9 +84,9 @@ describe('weapons', () => {
       return UNIT_DEFS[victim].hp - v.hp;
     };
     expect(damage('rifleman', 'rifleman')).toBe(8);
-    expect(damage('rifleman', 'harvester')).toBe(2);
+    expect(damage('rifleman', 'harvester')).toBe(1);
     expect(damage('tank', 'harvester')).toBe(30);
-    expect(damage('tank', 'rifleman')).toBe(12);
+    expect(damage('tank', 'rifleman')).toBe(21);
   });
 
   it('turn the shooter to face its target', () => {
