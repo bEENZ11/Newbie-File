@@ -38,7 +38,7 @@ Then open the address it prints. Add `?seed=123` to the address to get the same 
 - `npm test` runs the simulation tests.
 - `npm run build` type-checks and makes a production build in `dist`.
 - `npm run server` starts a local room server for online play. Open the game with `?server=ws://localhost:8787` on the end of its address.
-- `npx wrangler deploy`, after a build, puts the game and its room server on Cloudflare.
+- `npm run deploy` builds the game and publishes it, with its room server, to Cloudflare. It is live at https://aegis-and-dominion.browser-rts.workers.dev.
 
 ## Layout
 

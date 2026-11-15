@@ -1,12 +1,15 @@
 // The Cloudflare side: a Worker that serves the game and hands each room's
 // WebSocket connections to a Durable Object, which keeps that room's state.
+//
+// The game's own files are packed into this program by scripts/embed-site.mjs,
+// so one deployment publishes everything.
 
 import { TURN_MS, type ClientMessage, type ServerMessage } from '../src/net/protocol';
 import { Room, type Connection } from './room';
+import { SITE } from './site.gen';
 
 interface Env {
   ROOMS: DurableObjectNamespace;
-  ASSETS: { fetch(request: Request): Promise<Response> };
 }
 
 export default {
@@ -18,7 +21,12 @@ export default {
       // Everyone who asks for the same code reaches the same Durable Object.
       return env.ROOMS.get(env.ROOMS.idFromName(code)).fetch(request);
     }
-    return env.ASSETS.fetch(request);
+    const file = SITE[url.pathname === '/' ? '/index.html' : url.pathname];
+    if (!file) return new Response('Not found', { status: 404 });
+    // The page itself is always fetched fresh, so players get new versions straight away.
+    // Everything else has a name that changes when its contents do, so it can be kept.
+    const cache = url.pathname === '/' || url.pathname.endsWith('.html') ? 'no-cache' : 'public, max-age=86400';
+    return new Response(file.data, { headers: { 'Content-Type': file.type, 'Cache-Control': cache } });
   },
 };
 

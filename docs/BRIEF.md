@@ -261,9 +261,9 @@ Up to four people can play together. One creates a game from the menu and is giv
 
 To try it locally, run `npm run server` in one terminal and `npm run dev` in another, then open the game with `?server=ws://localhost:8787` on the end of its address in two browser windows.
 
-To put it online, with a Cloudflare account: `npm run build`, then `npx wrangler deploy`. The Worker serves the game itself as well as the rooms, so there is nothing else to host.
+**It is live** at https://aegis-and-dominion.browser-rts.workers.dev. To publish a new version, with a Cloudflare API token that can edit Workers: `npm run deploy`. The build packs the game's own files into the Worker, so the game and the rooms are published together as one program and there is nothing else to host.
 
-**Not yet done:** rejoining a game after a disconnection, having the computer take over a seat when someone leaves, choosing teams or seats in the lobby, player names, and chat. The Cloudflare wrapper is type-checked but has not been run, since deploying needs an account.
+**Not yet done:** rejoining a game after a disconnection, having the computer take over a seat when someone leaves, choosing teams or seats in the lobby, player names, and chat. The live site has been tested with two players in separate browser windows, not yet with three or four, or between different networks.
 
 ### Factions and the start menu
 

@@ -1,15 +1,16 @@
-# Cloudflare deployment. The Worker serves the built game from dist and relays
-# multiplayer through one Durable Object per room.
+# Cloudflare deployment. The Worker serves the game, which is packed into it at
+# build time, and relays multiplayer through one Durable Object per room.
 #
-#   npm run build
-#   npx wrangler deploy
+#   npm run deploy
 name = "aegis-and-dominion"
 main = "server/worker.ts"
 compatibility_date = "2026-01-01"
 
-[assets]
-directory = "./dist"
-binding = "ASSETS"
+# The game's files are bundled in as raw data.
+[[rules]]
+type = "Data"
+globs = ["**/*.bin"]
+fallthrough = false
 
 [[durable_objects.bindings]]
 name = "ROOMS"

@@ -4,5 +4,5 @@
     "lib": ["ES2022"],
     "types": ["@cloudflare/workers-types"]
   },
-  "include": ["server/worker.ts", "server/room.ts", "src/net/protocol.ts"]
+  "include": ["server/worker.ts", "server/room.ts", "server/site.gen.ts", "server/bin.d.ts", "src/net/protocol.ts"]
 }
