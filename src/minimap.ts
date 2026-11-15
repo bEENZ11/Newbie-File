@@ -1,6 +1,7 @@
 // The radar map in the sidebar: the whole battlefield at a glance.
 
 import { SIN_PITCH } from './render/renderer';
+import { hasRadar } from './sim/production';
 import type { Sim } from './sim/sim';
 import { MAP_H, MAP_W, ROCK, TREES, WATER, cellIndex } from './sim/types';
 import { LOCAL_PLAYER, type UiState } from './ui';
@@ -54,16 +55,42 @@ export class Minimap {
   }
 
   private jump(e: MouseEvent): void {
+    if (!hasRadar(this.sim.world, LOCAL_PLAYER)) return;
     const r = this.canvas.getBoundingClientRect();
     this.ui.camX = ((e.clientX - r.left) / r.width) * MAP_W;
     this.ui.camZ = ((e.clientY - r.top) / r.height) * MAP_H;
     this.onMove();
   }
 
+  /** Without a powered Radar Station there is nothing to show. */
+  private drawOffline(): void {
+    const g = this.ctx;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    g.fillStyle = '#0b0e10';
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(255,255,255,0.05)';
+    g.lineWidth = 1;
+    for (let i = 0; i < w; i += 16) {
+      g.strokeRect(i + 0.5, -1, 16, h + 2);
+      g.strokeRect(-1, i + 0.5, w + 2, 16);
+    }
+    g.textAlign = 'center';
+    g.fillStyle = '#93a0aa';
+    g.font = '600 13px system-ui, sans-serif';
+    g.fillText('RADAR OFFLINE', w / 2, h / 2 - 4);
+    g.font = '11px system-ui, sans-serif';
+    g.fillText('Needs a powered Radar Station', w / 2, h / 2 + 14);
+  }
+
   draw(): void {
     // A few times a second is plenty, and keeps it cheap.
     if (this.frame++ % 5 !== 0) return;
     const world = this.sim.world;
+    if (!hasRadar(world, LOCAL_PLAYER)) {
+      this.drawOffline();
+      return;
+    }
     const { visible, explored } = world.vision[LOCAL_PLAYER];
     const data = this.image.data;
 

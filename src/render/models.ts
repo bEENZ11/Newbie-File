@@ -227,6 +227,128 @@ function buildTank(): THREE.Group {
   return finish(g);
 }
 
+/** A light, open-topped car on four wheels, with a machine gun on a pintle. */
+function buildScout(): THREE.Group {
+  const g = new THREE.Group();
+  for (const [x, z] of [[0.3, -0.26], [0.3, 0.26], [-0.3, -0.26], [-0.3, 0.26]]) {
+    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.1, 10), mat(RUBBER));
+    wheel.rotation.x = Math.PI / 2;
+    wheel.position.set(x, 0.13, z);
+    g.add(wheel);
+  }
+  g.add(box(0.86, 0.14, 0.42, team.main, 0, 0.12, 0));
+  g.add(box(0.3, 0.08, 0.4, team.dark, 0.28, 0.26, 0));
+  g.add(box(0.04, 0.16, 0.38, GLASS, 0.12, 0.26, 0));
+  g.add(box(0.3, 0.12, 0.4, team.dark, -0.26, 0.26, 0));
+  // Roll bar and gun.
+  g.add(box(0.04, 0.24, 0.04, STEEL_DARK, -0.08, 0.26, -0.18));
+  g.add(box(0.04, 0.24, 0.04, STEEL_DARK, -0.08, 0.26, 0.18));
+  g.add(box(0.04, 0.04, 0.4, STEEL_DARK, -0.08, 0.5, 0));
+  g.add(box(0.36, 0.05, 0.05, RUBBER, 0.1, 0.54, 0));
+  g.scale.setScalar(1.1);
+  return finish(g);
+}
+
+/** A tracked gun carriage with a long barrel raised for lobbing shells. */
+function buildArtillery(): THREE.Group {
+  const g = new THREE.Group();
+  g.add(box(1.1, 0.2, 0.2, RUBBER, 0, 0, -0.3));
+  g.add(box(1.1, 0.2, 0.2, RUBBER, 0, 0, 0.3));
+  g.add(box(1.0, 0.16, 0.44, team.dark, 0, 0.1, 0));
+  g.add(box(0.5, 0.26, 0.56, team.main, -0.24, 0.26, 0));
+  g.add(box(0.5, 0.04, 0.58, team.light, -0.24, 0.52, 0));
+  g.add(box(0.3, 0.1, 0.4, STEEL, 0.2, 0.26, 0));
+  const barrel = box(1.05, 0.09, 0.09, STEEL_DARK, 0.5, 0, 0);
+  const mount = new THREE.Group();
+  mount.position.set(-0.1, 0.4, 0);
+  mount.rotation.z = 0.42;
+  barrel.position.set(0.5, 0, 0);
+  mount.add(barrel);
+  mount.add(box(0.14, 0.13, 0.13, STEEL_DARK, 1.0, -0.02, 0));
+  g.add(mount);
+  // Spades at the back, which brace it when it fires.
+  g.add(box(0.2, 0.06, 0.08, STEEL_DARK, -0.6, 0.06, -0.2));
+  g.add(box(0.2, 0.06, 0.08, STEEL_DARK, -0.6, 0.06, 0.2));
+  g.scale.setScalar(1.12);
+  return finish(g);
+}
+
+/** userData.spin marks the dish, which turns while the station is working. */
+function buildRadar(): THREE.Group {
+  const { root, stage } = staged();
+  stage(box(1.86, 0.1, 1.86, CONCRETE, 0, 0, 0));
+  stage(
+    box(1.1, 0.5, 1.0, team.main, -0.25, 0.1, 0.25),
+    box(1.14, 0.08, 1.04, team.light, -0.25, 0.42, 0.25),
+    box(0.4, 0.3, 0.05, STEEL_DARK, -0.25, 0.1, 0.76),
+    box(0.5, 0.12, 0.05, GLASS, -0.25, 0.44, 0.76),
+  );
+  stage(box(1.2, 0.08, 1.1, team.dark, -0.25, 0.6, 0.25));
+  stage(box(0.24, 1.3, 0.24, STEEL, 0.5, 0.1, -0.5), box(0.4, 0.1, 0.4, STEEL_DARK, 0.5, 1.4, -0.5));
+  const dish = new THREE.Group();
+  dish.position.set(0.5, 1.56, -0.5);
+  dish.userData.spin = true;
+  const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.2, 0.2, 14, 1, true), mat(STEEL_LIGHT));
+  bowl.rotation.z = -1.1;
+  bowl.position.set(0.16, 0.2, 0);
+  const back = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.03, 14), mat(STEEL_LIGHT));
+  back.rotation.z = -1.1;
+  back.position.set(0.07, 0.15, 0);
+  dish.add(bowl, back, box(0.05, 0.05, 0.05, HAZARD, 0.42, 0.3, 0));
+  stage(dish);
+  return finish(root);
+}
+
+function buildTech(): THREE.Group {
+  const { root, stage } = staged();
+  stage(box(1.86, 0.1, 1.86, CONCRETE, 0, 0, 0));
+  stage(
+    box(1.5, 0.7, 1.2, STEEL_LIGHT, 0, 0.1, -0.2),
+    box(1.54, 0.1, 1.24, team.main, 0, 0.5, -0.2),
+    box(1.0, 0.2, 0.05, GLASS, 0, 0.26, 0.41),
+  );
+  stage(box(1.56, 0.08, 1.26, team.dark, 0, 0.8, -0.2));
+  // A glass dome over the laboratory.
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat(GLASS));
+  dome.position.set(-0.3, 0.88, -0.2);
+  stage(dome);
+  stage(
+    box(0.05, 0.9, 0.05, STEEL_DARK, 0.5, 0.88, -0.5),
+    box(0.3, 0.04, 0.04, STEEL_DARK, 0.5, 1.5, -0.5),
+    box(0.2, 0.04, 0.04, STEEL_DARK, 0.5, 1.66, -0.5),
+    box(0.08, 0.08, 0.08, HAZARD, 0.5, 1.78, -0.5),
+  );
+  stage(box(0.6, 0.3, 0.4, team.main, 0.5, 0.1, 0.62), box(0.64, 0.05, 0.44, team.light, 0.5, 0.4, 0.62));
+  return finish(root);
+}
+
+function buildDepot(): THREE.Group {
+  const { root, stage } = staged();
+  stage(box(1.86, 0.1, 1.86, CONCRETE, 0, 0, 0));
+  stage(...hazardPad(1.3, 1.3, 0.2, 0.1, 0.2));
+  // A gantry over the repair pad.
+  stage(
+    box(0.12, 1.0, 0.12, HAZARD, -0.5, 0.1, -0.5),
+    box(0.12, 1.0, 0.12, HAZARD, 0.85, 0.1, -0.5),
+    box(1.5, 0.12, 0.14, HAZARD, 0.18, 1.1, -0.5),
+    box(0.16, 0.2, 0.18, STEEL_DARK, 0.2, 0.9, -0.5),
+  );
+  stage(
+    box(0.5, 0.5, 0.7, team.main, -0.62, 0.1, 0.5),
+    box(0.54, 0.06, 0.74, team.dark, -0.62, 0.6, 0.5),
+    box(0.05, 0.16, 0.4, GLASS, -0.36, 0.34, 0.5),
+  );
+  stage(box(0.3, 0.24, 0.3, team.dark, -0.62, 0.1, -0.1), box(0.2, 0.2, 0.2, STEEL, 0.75, 0.1, 0.72));
+  return finish(root);
+}
+
+/** A full cell of concrete, so neighbouring pieces join into a continuous wall. */
+function buildWall(): THREE.Group {
+  const { root, stage } = staged();
+  stage(box(1.0, 0.5, 1.0, CONCRETE, 0, 0, 0), box(0.86, 0.08, 0.86, STEEL_DARK, 0, 0.5, 0), box(1.02, 0.07, 1.02, team.main, 0, 0.3, 0));
+  return finish(root);
+}
+
 /** userData.arm marks the crane arm, which swings once the yard is working. */
 function buildConyard(): THREE.Group {
   const { root, stage } = staged();
@@ -369,6 +491,10 @@ const BUILDERS: Record<BuildingType, () => THREE.Group> = {
   barracks: buildBarracks,
   factory: buildFactory,
   turret: buildTurret,
+  radar: buildRadar,
+  tech: buildTech,
+  depot: buildDepot,
+  wall: buildWall,
 };
 
 const UNIT_BUILDERS: Record<UnitType, () => THREE.Group> = {
@@ -376,6 +502,13 @@ const UNIT_BUILDERS: Record<UnitType, () => THREE.Group> = {
   harvester: buildHarvester,
   rifleman: buildRifleman,
   tank: buildTank,
+  // Without the asset pack, the other infantry and the heavy tank reuse these built-in shapes.
+  rocket: buildRifleman,
+  grenadier: buildRifleman,
+  engineer: buildRifleman,
+  scout: buildScout,
+  artillery: buildArtillery,
+  heavy: buildTank,
 };
 
 const templates = new Map<string, THREE.Group>();
@@ -391,6 +524,14 @@ function fromTemplate(key: string, owner: number, build: () => THREE.Group): THR
   }
   return template.clone();
 }
+
+/** Which of the pack soldier's weapons each kind of infantry carries. */
+const SOLDIER_KIT: Partial<Record<UnitType, { weapon: string; trousers?: number }>> = {
+  rifleman: { weapon: 'AK' },
+  rocket: { weapon: 'RocketLauncher' },
+  grenadier: { weapon: 'GrenadeLauncher' },
+  engineer: { weapon: 'Shovel', trousers: HAZARD },
+};
 
 /** A copy of a pack material in a team's colour, made once per team and shared. */
 const tinted = new Map<string, THREE.Material>();
@@ -437,12 +578,13 @@ const WEAPONS = [
  * The animated soldier from the asset pack. userData.anim holds its animation
  * player and the clips the game uses, which the renderer switches between.
  */
-function packSoldier(owner: number, weapon: string): THREE.Group | null {
+function packSoldier(owner: number, weapon: string, trousers?: number): THREE.Group | null {
   const gltf = asset('soldier');
   if (!gltf) return null;
   const model = cloneSkinned(gltf.scene);
   const palette = PALETTES[owner % PALETTES.length];
-  dress(model, owner, { Character_Main: palette.main, Pants: palette.dark });
+  // Engineers wear high-visibility trousers, so they stand out from the fighting troops.
+  dress(model, owner + (trousers ? 200 : 0), { Character_Main: palette.main, Pants: trousers ?? palette.dark });
   model.traverse((o) => {
     if (WEAPONS.includes(o.name)) o.visible = o.name === weapon;
     // Animated meshes move outside their original bounds, so never skip drawing them.
@@ -458,22 +600,28 @@ function packSoldier(owner: number, weapon: string): THREE.Group | null {
   return group;
 }
 
-function packTank(): THREE.Group | null {
+/** The pack's tank. The heavy version is bigger, with its colours the other way round. */
+function packTank(length: number, heavy: boolean): THREE.Group | null {
   const gltf = asset('tank');
   if (!gltf) return null;
   const model = gltf.scene.clone();
   // team is set by fromTemplate to the palette of whoever this is being built for.
-  dress(model, PALETTES.indexOf(team), { Tank_Main: team.main, Tank_Main2: team.dark });
-  return fitted(model, 'length', 1.3);
+  dress(model, PALETTES.indexOf(team) + (heavy ? 100 : 0), {
+    Tank_Main: heavy ? team.dark : team.main,
+    Tank_Main2: heavy ? team.main : team.dark,
+  });
+  return fitted(model, 'length', length);
 }
 
 export function makeUnit(type: UnitType, owner: number): THREE.Group {
   // Animated models cannot share a template, so each soldier is built fresh.
-  if (type === 'rifleman') {
-    const soldier = packSoldier(owner, 'AK');
+  const kit = SOLDIER_KIT[type];
+  if (kit) {
+    const soldier = packSoldier(owner, kit.weapon, kit.trousers);
     if (soldier) return soldier;
   }
-  if (type === 'tank' && asset('tank')) return fromTemplate('packTank', owner, () => packTank()!);
+  if (type === 'tank' && asset('tank')) return fromTemplate('packTank', owner, () => packTank(1.3, false)!);
+  if (type === 'heavy' && asset('tank')) return fromTemplate('packHeavy', owner, () => packTank(1.8, true)!);
   return fromTemplate(type, owner, UNIT_BUILDERS[type]);
 }
 

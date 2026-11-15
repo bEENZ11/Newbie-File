@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Sim } from '../src/sim/sim';
-import { GRASS, UNIT_DEFS, type World } from '../src/sim/types';
+import { BUILDING_DEFS, GRASS, UNIT_DEFS, type World } from '../src/sim/types';
 
 const run = (sim: Sim, n: number, each?: () => void): void => {
   for (let i = 0; i < n && sim.world.winner === -1; i++) {
@@ -32,7 +32,7 @@ describe('the computer opponent', () => {
       let demand = 0;
       for (const b of sim.world.buildings) {
         if (b.owner !== 1 || b.progress < b.total) continue;
-        const pw = { conyard: 0, power: 100, refinery: -30, barracks: -20, factory: -30, turret: -20 }[b.type];
+        const pw = BUILDING_DEFS[b.type].power;
         if (pw > 0) supply += pw;
         else demand -= pw;
       }

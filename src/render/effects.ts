@@ -117,6 +117,20 @@ export class Effects {
           (o.material as THREE.MeshBasicMaterial).opacity = 1 - t;
         });
         spark.position.copy(to);
+      } else if (ev.kind === 'rocket') {
+        // A rocket that streaks across trailing smoke, then bursts.
+        const flight = 60 + from.distanceTo(to) * 45;
+        const rocket = this.add(BOX, 0xe9e9e9, now, flight, (t, o) => {
+          o.position.copy(from).lerp(to, t);
+        });
+        rocket.scale.set(0.05, 0.05, 0.24);
+        rocket.position.copy(from);
+        rocket.lookAt(to);
+        for (let i = 1; i <= 5; i++) {
+          const at = from.clone().lerp(to, i / 6);
+          this.puff(at.x, at.y, at.z, 0.1, 0xcfcfcf, now + (flight * i) / 6);
+        }
+        this.blast(to.x, to.y, to.z, 0.5, now + flight);
       } else {
         // A shell that flies across, then bursts where it lands.
         const flight = 130;

@@ -24,6 +24,7 @@ Then open the address it prints. Add `?seed=123` to the address to get the same 
 - Generated terrain with rocks, lakes and woods.
 - A computer opponent that builds a base, harvests, and attacks in growing waves.
 - Synthesised sound effects.
+- A wider roster: rocket soldiers, grenadiers, engineers that capture buildings, scout cars, artillery and heavy tanks, plus a Radar Station, Tech Centre, Service Depot and walls.
 - A deterministic simulation running at 20 ticks a second, separate from drawing and input.
 
 ## Commands

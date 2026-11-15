@@ -58,6 +58,10 @@ const CHIMNEYS: Record<BuildingType, [number, number, number, number, number][]>
     [0.5, 1.8, -1.0, 0.12, 0x555555],
   ],
   turret: [],
+  radar: [],
+  tech: [[0.5, 1.0, 0.62, 0.1, 0xdfe6ea]],
+  depot: [],
+  wall: [],
 };
 
 /** True if any cell under a building is set in the given vision layer. */
@@ -69,7 +73,18 @@ function footprintSeen(layer: Uint8Array, b: Building): boolean {
 }
 
 /** Selection ring size for each kind of unit, as a share of the largest. */
-const RING_SIZE: Record<UnitType, number> = { pioneer: 0.85, harvester: 0.62, tank: 0.52, rifleman: 0.28 };
+const RING_SIZE: Record<UnitType, number> = {
+  pioneer: 0.85,
+  harvester: 0.62,
+  tank: 0.52,
+  rifleman: 0.28,
+  rocket: 0.28,
+  grenadier: 0.28,
+  engineer: 0.28,
+  scout: 0.42,
+  artillery: 0.52,
+  heavy: 0.68,
+};
 
 /** How many nuggets to draw on a cell, so a field visibly thins as it is mined. */
 function oreNuggets(amount: number): number {
@@ -101,7 +116,10 @@ interface BuildingView {
   stages: THREE.Object3D[];
   arm: THREE.Object3D | null;
   head: THREE.Object3D | null;
+  spin: THREE.Object3D | null;
   frame: THREE.Mesh;
+  /** Whose colours the model is painted in, so it can be rebuilt if the building changes hands. */
+  owner: number;
 }
 
 export class Renderer {
@@ -547,22 +565,30 @@ export class Renderer {
     for (const b of world.buildings) {
       alive.add(b.id);
       let view = this.buildingViews.get(b.id);
+      if (view && view.owner !== b.owner) {
+        // Captured: take the old model down and put one up in the new owner's colours.
+        this.scene.remove(view.obj);
+        this.buildingViews.delete(b.id);
+        view = undefined;
+      }
       if (!view) {
         const obj = makeBuilding(b.type, b.owner);
         obj.position.set(b.cx + b.w / 2, 0, b.cy + b.h / 2);
         const stages: THREE.Object3D[] = [];
         let arm: THREE.Object3D | null = null;
         let head: THREE.Object3D | null = null;
+        let spin: THREE.Object3D | null = null;
         obj.traverse((o) => {
           if (typeof o.userData.stage === 'number') stages[o.userData.stage] = o;
           if (o.userData.arm) arm = o;
           if (o.userData.head) head = o;
+          if (o.userData.spin) spin = o;
         });
         const frame = new THREE.Mesh(frameGeometry(b.w + 0.1, b.h + 0.1, 0.06), this.frameMat);
         frame.position.y = 0.03;
         obj.add(frame);
         this.scene.add(obj);
-        view = { obj, stages, arm, head, frame };
+        view = { obj, stages, arm, head, spin, frame, owner: b.owner };
         this.buildingViews.set(b.id, view);
       }
       // Build-up: each part rises out of the ground in turn.
@@ -575,6 +601,7 @@ export class Renderer {
         stage.scale.y = Math.max(0.001, eased);
       });
       if (view.arm && p >= 1) view.arm.rotation.y = Math.sin(now * 0.0005 + b.id) * 1.1 - 0.5;
+      if (view.spin && p >= 1) view.spin.rotation.y = now * 0.0014;
       if (view.head) {
         let turn = (-b.aim * Math.PI) / 4 - view.head.rotation.y;
         turn = Math.atan2(Math.sin(turn), Math.cos(turn));

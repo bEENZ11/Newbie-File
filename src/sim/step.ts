@@ -1,4 +1,5 @@
 import { tickAi } from './ai';
+import { orderCapture, tickDepots, tickEngineers } from './support';
 import { orderAttack, tickCombat } from './combat';
 import { VISION_INTERVAL, updateVision } from './vision';
 import { orderHarvester, tickHarvesters } from './harvest';
@@ -39,6 +40,8 @@ export function stepWorld(world: World, commands: readonly Command[], events: Si
 
   tickHarvesters(world);
   tickCombat(world, events);
+  tickEngineers(world, events);
+  tickDepots(world);
 
   // Deploying removes units, so it runs on a copy of the list.
   for (const unit of world.units.slice()) {
@@ -100,6 +103,9 @@ function applyCommand(world: World, cmd: Command, events: SimEvent[]): void {
     case 'repair':
       toggleRepair(world, cmd.player, cmd.buildingId);
       break;
+    case 'capture':
+      orderCapture(world, cmd.player, cmd.unitIds, cmd.buildingId);
+      break;
   }
 }
 
@@ -118,6 +124,7 @@ function moveGroup(world: World, player: number, unitIds: number[], cx: number, 
     // A move order always overrides an attack.
     unit.attack = 0;
     unit.chase = false;
+    unit.capture = 0;
     if (unit.type === 'harvester') {
       orderHarvester(world, unit, cx, cy);
     } else {

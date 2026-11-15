@@ -210,6 +210,25 @@ export class Input {
     const picked = this.renderer.pickBuilding(ui, sx, sy);
     const building = this.sim.world.buildings.find((b) => b.id === picked);
 
+    // Engineers walk into a building: to capture an enemy's, or mend a damaged one of ours.
+    const engineers = this.sim.world.units.filter(
+      (u) => ui.selectedUnits.has(u.id) && u.type === 'engineer',
+    );
+    const worthEntering =
+      building &&
+      building.type !== 'wall' &&
+      (building.owner !== LOCAL_PLAYER || building.hp < BUILDING_DEFS[building.type].hp);
+    if (building && worthEntering && engineers.length > 0) {
+      this.sim.issue({
+        type: 'capture',
+        player: LOCAL_PLAYER,
+        unitIds: engineers.map((u) => u.id),
+        buildingId: building.id,
+      });
+      ui.markers.push({ x: building.cx + building.w / 2, z: building.cy + building.h / 2, t: performance.now() });
+      if (engineers.length === ui.selectedUnits.size) return;
+    }
+
     // Right-clicking something of the enemy's is an order to attack it.
     const foe = this.unitAt(sx, sy, 'enemy');
     const hostile = foe ?? (building && building.owner !== LOCAL_PLAYER ? building : null);

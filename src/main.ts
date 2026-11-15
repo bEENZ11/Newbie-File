@@ -15,9 +15,10 @@ import {
   SUB,
   TICK_RATE,
   UNIT_DEFS,
+  type BuildingType,
   type UnitType,
 } from './sim/types';
-import { START_CX, START_CY, spawnUnit } from './sim/world';
+import { START_CX, START_CY, addBuilding, spawnUnit } from './sim/world';
 import { LOCAL_PLAYER, createUi, placementOrigin } from './ui';
 
 const TICK_MS = 1000 / TICK_RATE;
@@ -91,6 +92,11 @@ function handleEvents(now: number): void {
     renderer.onEvent(ev, now);
     if (ev.type === 'shot') {
       sounds.play(ev.kind === 'bullet' ? 'rifle' : 'cannon', loudness(ev.fromX / SUB, ev.fromY / SUB));
+    } else if (ev.type === 'captured') {
+      // Good news if we took it, bad news if it was ours.
+      sounds.play(ev.player === LOCAL_PLAYER ? 'ready' : ev.from === LOCAL_PLAYER ? 'refused' : 'click');
+    } else if (ev.type === 'mended' && ev.player === LOCAL_PLAYER) {
+      sounds.play('ready');
     } else if (ev.type === 'unitDied') {
       sounds.play('blast', loudness(ev.x / SUB, ev.y / SUB));
     } else if (ev.type === 'buildingDestroyed') {
@@ -142,6 +148,9 @@ function currentHint(): string {
   if (ui.sellMode) return 'Click a building to sell it for half its cost. Right-click to stop';
   if (ui.repairMode) return 'Click a damaged building to repair it for credits. Click again to stop';
   const chosen = world.units.filter((u) => ui.selectedUnits.has(u.id));
+  if (chosen.length > 0 && chosen.every((u) => u.type === 'engineer')) {
+    return 'Engineer selected. Right-click an enemy building to capture it, or a damaged one of yours to mend it';
+  }
   if (chosen.some((u) => UNIT_DEFS[u.type].weapon)) {
     return `${chosen.length} selected. Right-click ground to move, or an enemy to attack. Shift and a number saves the group`;
   }
@@ -214,6 +223,14 @@ const debug = {
   paused: false,
   spawn: (type: UnitType, owner: number, cx: number, cy: number) =>
     spawnUnit(sim.world, type, owner, cx, cy),
+  /** Puts up a finished building, ignoring cost and the usual placement rules. */
+  build: (type: BuildingType, owner: number, cx: number, cy: number) => {
+    const b = addBuilding(sim.world, type, owner, cx, cy);
+    b.progress = b.total;
+    return b;
+  },
+  /** Whether the local player could place a building with its corner on this cell. */
+  fits: (type: BuildingType, cx: number, cy: number) => checkPlacement(sim.world, LOCAL_PLAYER, type, cx, cy).ok,
 };
 
 let last = performance.now();

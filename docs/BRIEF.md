@@ -225,9 +225,42 @@ The enemy starts with a Construction Yard in the south-east and plays by the sam
 
 Shots, cannon fire, explosions, collapsing buildings, order confirmations and build notifications are all synthesised in the browser, so there are no audio files to load or license. Sounds from the fog are silent, and those off-screen are quieter. M mutes.
 
+### The shared roster
+
+Both sides currently draw on the same units and buildings. This is the common core that the factions will later be split from.
+
+| Infantry | Cost | Needs | Role |
+| --- | --- | --- | --- |
+| Rifleman | 80 | Barracks | Cheap, good against other infantry |
+| Rocket Soldier | 200 | Barracks | Strong against vehicles, poor against infantry |
+| Grenadier | 140 | Barracks | Short range, the best foot soldier against buildings |
+| Engineer | 400 | Radar Station | Unarmed. Captures an enemy building, or fully mends one of yours, and is used up doing it |
+
+| Vehicle | Cost | Needs | Role |
+| --- | --- | --- | --- |
+| Harvester | 1,100 | Refinery | Gathers ore |
+| Scout Car | 350 | War Factory | Very fast and far-sighted, with a light machine gun |
+| Light Tank | 600 | War Factory | The all-round fighting vehicle |
+| Artillery | 900 | Radar Station | Out-ranges everything, turrets included, but is fragile |
+| Heavy Tank | 1,100 | Tech Centre | Twice the armour and firepower of a Light Tank, and slower |
+
+| Building | Cost | Needs | Role |
+| --- | --- | --- | --- |
+| Radar Station | 1,000 | Refinery | Switches on the radar map, which also needs full power |
+| Tech Centre | 1,500 | Radar Station and War Factory | Unlocks the Heavy Tank |
+| Service Depot | 1,200 | War Factory | Repairs vehicles parked beside it, for credits |
+| Wall | 50 | Barracks | Blocks movement. Can be laid up to five cells from the base |
+
+Rules worth knowing:
+
+- Walls do not count as part of the base. They cannot be used to extend where you may build, troops ignore them unless ordered to attack one, and a side left with nothing but walls has lost.
+- A captured building works for its new owner straight away, and taking an enemy's last building wins the game.
+- The sidebar has a tab each for structures, infantry and vehicles. A dot on a tab shows that something behind it is building or ready.
+- The computer builds a Radar Station after its first attack and a Tech Centre after its second, and mixes rocket soldiers, grenadiers, scout cars, artillery and heavy tanks into its army. It does not yet use engineers, walls or depots.
+
 ### Still to come
 
-Hand-made maps and a map editor, more unit and building types, a second faction, multiplayer on Cloudflare, music, proper art, and balance.
+Splitting the roster into two factions, hand-made maps and a map editor, multiplayer on Cloudflare, music, further art, and balance.
 
 ## What the classics confirmed
 

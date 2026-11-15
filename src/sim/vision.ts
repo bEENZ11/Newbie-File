@@ -28,7 +28,9 @@ export function updateVision(world: World): void {
     }
     for (const b of world.buildings) {
       if (b.owner !== player) continue;
-      reveal(v.visible, b.cx + (b.w >> 1), b.cy + (b.h >> 1), BUILDING_SIGHT + (b.w >> 1));
+      // Walls are not lookouts. They see only the ground beside them.
+      const sight = b.type === 'wall' ? 1 : BUILDING_SIGHT + (b.w >> 1);
+      reveal(v.visible, b.cx + (b.w >> 1), b.cy + (b.h >> 1), sight);
     }
     for (let i = 0; i < v.visible.length; i++) if (v.visible[i]) v.explored[i] = 1;
   });

@@ -125,6 +125,47 @@
       #power.low #power-text {
         color: #ff8078;
       }
+      #tabs {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 4px;
+      }
+      #tabs button {
+        position: relative;
+        padding: 6px 0;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        background: #12161a;
+        border: 1px solid var(--line);
+        border-radius: 4px 4px 0 0;
+        cursor: pointer;
+      }
+      #tabs button.on {
+        color: #fff;
+        background: #2b343d;
+        border-bottom-color: #2b343d;
+      }
+      /* A dot on a tab means something behind it is building, or ready to place. */
+      #tabs button[data-state='busy']::after,
+      #tabs button[data-state='ready']::after {
+        content: '';
+        position: absolute;
+        top: 4px;
+        right: 5px;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #4f9fff;
+      }
+      #tabs button[data-state='ready']::after {
+        background: #4fd16a;
+        box-shadow: 0 0 6px #4fd16a;
+      }
+      .list[hidden] {
+        display: none;
+      }
       .list {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -352,15 +393,13 @@
         <div id="power-bar"><div id="power-fill"></div></div>
       </div>
       <div>
-        <div class="label">Structures</div>
+        <div id="tabs">
+          <button data-tab="structures">Structures</button>
+          <button data-tab="infantry">Infantry</button>
+          <button data-tab="vehicle">Vehicles</button>
+        </div>
         <div id="structures" class="list"></div>
-      </div>
-      <div>
-        <div class="label">Infantry</div>
         <div id="infantry" class="list"></div>
-      </div>
-      <div>
-        <div class="label">Vehicles</div>
         <div id="vehicle" class="list"></div>
       </div>
       <div id="tools">

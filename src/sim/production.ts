@@ -138,6 +138,11 @@ export function tickProduction(world: World, events: SimEvent[]): void {
   });
 }
 
+/** The radar map needs a working Radar Station and enough power to run it. */
+export function hasRadar(world: World, player: number): boolean {
+  return owns(world, player, 'radar') && !powerOf(world, player).low;
+}
+
 export interface PlacementCheck {
   ok: boolean;
   /** False when every cell is clear but the spot is too far from the base. */
@@ -189,14 +194,18 @@ export function checkPlacement(
 
   // Must be near an existing building of the player's, leaving at most a
   // one-cell gap. This is what keeps a base in one piece.
+  // Walls do not count as part of the base, or a line of them could be used to
+  // creep building across the map.
+  const range = def.placeRange ?? BUILD_RANGE;
   const inRange = world.buildings.some(
     (b) =>
       b.owner === player &&
       !b.selling &&
-      cx < b.cx + b.w + BUILD_RANGE &&
-      cx + def.w + BUILD_RANGE > b.cx &&
-      cy < b.cy + b.h + BUILD_RANGE &&
-      cy + def.h + BUILD_RANGE > b.cy,
+      b.type !== 'wall' &&
+      cx < b.cx + b.w + range &&
+      cx + def.w + range > b.cx &&
+      cy < b.cy + b.h + range &&
+      cy + def.h + range > b.cy,
   );
 
   return { ok: clear && inRange, inRange, cells };

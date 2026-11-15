@@ -21,6 +21,10 @@ const SHORT: Record<BuildingType, string> = {
   barracks: 'Barracks',
   factory: 'Factory',
   turret: 'Turret',
+  radar: 'Radar',
+  tech: 'Tech Centre',
+  depot: 'Depot',
+  wall: 'Wall',
 };
 
 interface Entry {
@@ -39,6 +43,7 @@ export class Sidebar {
   private sellButton: HTMLButtonElement;
   private repairButton: HTMLButtonElement;
   private entries: Entry[] = [];
+  private tabs: HTMLButtonElement[] = [];
   /** Credits shown on screen, which roll towards the real figure. */
   private shownCredits = -1;
 
@@ -72,8 +77,23 @@ export class Sidebar {
       ui.sellMode = false;
       ui.placing = null;
     });
+    // Only one list shows at a time. The tabs along the top switch between them.
+    this.tabs = [...root.querySelectorAll<HTMLButtonElement>('#tabs button')];
+    for (const tab of this.tabs) {
+      tab.addEventListener('click', () => this.showTab(tab.dataset.tab!));
+    }
+    this.showTab('structures');
+
     // Clicks on the sidebar should never fall through to the map.
     root.addEventListener('mousedown', (e) => e.stopPropagation());
+  }
+
+  private showTab(name: string): void {
+    for (const tab of this.tabs) {
+      const on = tab.dataset.tab === name;
+      tab.classList.toggle('on', on);
+      (this.root.querySelector(`#${tab.dataset.tab}`) as HTMLElement).hidden = !on;
+    }
   }
 
   private addButton(
@@ -224,6 +244,19 @@ export class Sidebar {
       entry.button.classList.toggle('placing', v.placing);
       setText(entry.status, v.label);
       setText(entry.count, v.count > 1 ? `×${v.count}` : '');
+    }
+
+    // Mark each tab with what is going on behind it, so nothing finishes unnoticed.
+    for (const tab of this.tabs) {
+      const name = tab.dataset.tab!;
+      let state = '';
+      if (name === 'structures') {
+        const prod = player.production;
+        state = prod ? (prod.state === 'ready' ? 'ready' : 'busy') : '';
+      } else if (player.queues[name as 'infantry' | 'vehicle'].items.length > 0) {
+        state = 'busy';
+      }
+      if (tab.dataset.state !== state) tab.dataset.state = state;
     }
 
     this.sellButton.classList.toggle('on', this.ui.sellMode);

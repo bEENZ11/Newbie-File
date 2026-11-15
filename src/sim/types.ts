@@ -35,8 +35,30 @@ export const ROCK = 1;
 export const WATER = 2;
 export const TREES = 3;
 
-export type UnitType = 'pioneer' | 'harvester' | 'rifleman' | 'tank';
-export const UNIT_TYPES: readonly UnitType[] = ['pioneer', 'harvester', 'rifleman', 'tank'];
+export type UnitType =
+  | 'pioneer'
+  | 'harvester'
+  | 'rifleman'
+  | 'tank'
+  | 'rocket'
+  | 'grenadier'
+  | 'engineer'
+  | 'scout'
+  | 'artillery'
+  | 'heavy';
+/** Fixed order, used for the sidebar and for hashing. New types go on the end. */
+export const UNIT_TYPES: readonly UnitType[] = [
+  'pioneer',
+  'harvester',
+  'rifleman',
+  'tank',
+  'rocket',
+  'grenadier',
+  'engineer',
+  'scout',
+  'artillery',
+  'heavy',
+];
 
 /** Units are trained in two lines that run side by side. */
 export type QueueKind = 'infantry' | 'vehicle';
@@ -69,7 +91,17 @@ export const HARVEST_JOBS: readonly HarvestJob[] = [
   'idle',
   'manual',
 ];
-export type BuildingType = 'conyard' | 'power' | 'refinery' | 'barracks' | 'factory' | 'turret';
+export type BuildingType =
+  | 'conyard'
+  | 'power'
+  | 'refinery'
+  | 'barracks'
+  | 'factory'
+  | 'turret'
+  | 'radar'
+  | 'tech'
+  | 'depot'
+  | 'wall';
 
 /** Fixed order, used for the sidebar and for hashing. */
 export const BUILDING_TYPES: readonly BuildingType[] = [
@@ -79,6 +111,10 @@ export const BUILDING_TYPES: readonly BuildingType[] = [
   'barracks',
   'factory',
   'turret',
+  'radar',
+  'tech',
+  'depot',
+  'wall',
 ];
 
 /** What a target is made of, which decides how much each weapon hurts it. */
@@ -91,7 +127,7 @@ export interface WeaponDef {
   /** Ticks between shots. */
   cooldown: number;
   /** Only affects how the shot is drawn. */
-  kind: 'bullet' | 'shell';
+  kind: 'bullet' | 'shell' | 'rocket';
   /** Percentage of damage dealt to each armour class. */
   versus: Record<ArmourClass, number>;
 }
@@ -130,6 +166,8 @@ export interface BuildingDef {
   power: number;
   /** Buildings the player must own first, besides a Construction Yard. */
   requires: readonly BuildingType[];
+  /** How far from the base it may be placed, in cells, if not the usual distance. */
+  placeRange?: number;
 }
 
 export const UNIT_DEFS: Record<UnitType, UnitDef> = {
@@ -193,6 +231,113 @@ export const UNIT_DEFS: Record<UnitType, UnitDef> = {
     produceTicks: 240,
     queue: 'vehicle',
     requires: [],
+  },
+  // Rockets wreck vehicles but are wasted on infantry.
+  rocket: {
+    name: 'Rocket Soldier',
+    sight: 5,
+    hp: 45,
+    armour: 'infantry',
+    weapon: {
+      range: 5,
+      damage: 40,
+      cooldown: 50,
+      kind: 'rocket',
+      versus: { infantry: 25, vehicle: 100, building: 60 },
+    },
+    speed: 20,
+    cost: 200,
+    produceTicks: 120,
+    queue: 'infantry',
+    requires: [],
+  },
+  // Grenades are short-ranged, but nothing on foot does more to a building.
+  grenadier: {
+    name: 'Grenadier',
+    sight: 5,
+    hp: 55,
+    armour: 'infantry',
+    weapon: {
+      range: 3,
+      damage: 28,
+      cooldown: 30,
+      kind: 'shell',
+      versus: { infantry: 80, vehicle: 40, building: 110 },
+    },
+    speed: 22,
+    cost: 140,
+    produceTicks: 100,
+    queue: 'infantry',
+    requires: [],
+  },
+  // Unarmed. Walks into an enemy building to capture it, or one of ours to mend it.
+  engineer: {
+    name: 'Engineer',
+    sight: 4,
+    hp: 40,
+    armour: 'infantry',
+    weapon: null,
+    speed: 22,
+    cost: 400,
+    produceTicks: 160,
+    queue: 'infantry',
+    requires: ['radar'],
+  },
+  // Fast and far-sighted, with a machine gun that only really troubles infantry.
+  scout: {
+    name: 'Scout Car',
+    sight: 9,
+    hp: 140,
+    armour: 'vehicle',
+    weapon: {
+      range: 4,
+      damage: 10,
+      cooldown: 8,
+      kind: 'bullet',
+      versus: { infantry: 100, vehicle: 35, building: 20 },
+    },
+    speed: 72,
+    cost: 350,
+    produceTicks: 140,
+    queue: 'vehicle',
+    requires: [],
+  },
+  // Out-ranges everything, turrets included, but folds quickly if anything reaches it.
+  artillery: {
+    name: 'Artillery',
+    sight: 6,
+    hp: 150,
+    armour: 'vehicle',
+    weapon: {
+      range: 9,
+      damage: 90,
+      cooldown: 90,
+      kind: 'shell',
+      versus: { infantry: 90, vehicle: 50, building: 130 },
+    },
+    speed: 28,
+    cost: 900,
+    produceTicks: 300,
+    queue: 'vehicle',
+    requires: ['radar'],
+  },
+  heavy: {
+    name: 'Heavy Tank',
+    sight: 6,
+    hp: 600,
+    armour: 'vehicle',
+    weapon: {
+      range: 5,
+      damage: 60,
+      cooldown: 50,
+      kind: 'shell',
+      versus: { infantry: 40, vehicle: 100, building: 90 },
+    },
+    speed: 30,
+    cost: 1100,
+    produceTicks: 360,
+    queue: 'vehicle',
+    requires: ['tech'],
   },
 };
 
@@ -271,6 +416,53 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     power: -20,
     requires: ['barracks'],
   },
+  radar: {
+    name: 'Radar Station',
+    hp: 600,
+    w: 2,
+    h: 2,
+    cost: 1000,
+    produceTicks: 400,
+    buildTicks: 30,
+    power: -40,
+    requires: ['refinery'],
+  },
+  tech: {
+    name: 'Tech Centre',
+    hp: 500,
+    w: 2,
+    h: 2,
+    cost: 1500,
+    produceTicks: 500,
+    buildTicks: 30,
+    power: -50,
+    requires: ['radar', 'factory'],
+  },
+  // Vehicles parked beside it are repaired for credits.
+  depot: {
+    name: 'Service Depot',
+    hp: 700,
+    w: 2,
+    h: 2,
+    cost: 1200,
+    produceTicks: 400,
+    buildTicks: 30,
+    power: -30,
+    requires: ['factory'],
+  },
+  // Cheap and quick. Blocks movement, and can be laid further out than other buildings.
+  wall: {
+    name: 'Wall',
+    hp: 300,
+    w: 1,
+    h: 1,
+    cost: 50,
+    produceTicks: 30,
+    buildTicks: 6,
+    power: 0,
+    requires: ['barracks'],
+    placeRange: 5,
+  },
 };
 
 export interface Unit {
@@ -304,6 +496,8 @@ export interface Unit {
   cooldown: number;
   /** Ticks until it next re-plans its route to a moving target. */
   chaseTimer: number;
+  /** Engineers only: the building it is on its way to capture or mend, or 0. */
+  capture: number;
   // Harvesters only.
   job: HarvestJob;
   cargo: number;
@@ -388,7 +582,7 @@ export interface World {
   /** The id of the unit holding each cell, or 0. Derived from units. */
   occupied: Int32Array;
   /** Per player: the computer opponent's memory, or null for a person. */
-  ai: ({ wave: number; lastWave: number } | null)[];
+  ai: ({ wave: number; lastWave: number; trained: number; built: number } | null)[];
   /** Per player: cells in view right now, and cells seen at any time. */
   vision: { visible: Uint8Array; explored: Uint8Array }[];
 }
@@ -406,7 +600,8 @@ export type Command =
   | { type: 'untrain'; player: number; unit: UnitType }
   | { type: 'rally'; player: number; buildingId: number; cx: number; cy: number }
   | { type: 'attack'; player: number; unitIds: number[]; targetId: number }
-  | { type: 'repair'; player: number; buildingId: number };
+  | { type: 'repair'; player: number; buildingId: number }
+  | { type: 'capture'; player: number; unitIds: number[]; buildingId: number };
 
 /** One-off notifications for the UI. Never read back by the simulation. */
 export type SimEvent =
@@ -418,10 +613,12 @@ export type SimEvent =
   | { type: 'sold'; player: number; buildingId: number; refund: number }
   | { type: 'unitReady'; player: number; unitId: number; unit: UnitType }
   // Positions here are in sub-cell units, for drawing the shot.
-  | { type: 'shot'; kind: 'bullet' | 'shell'; fromX: number; fromY: number; toX: number; toY: number }
+  | { type: 'shot'; kind: WeaponDef['kind']; fromX: number; fromY: number; toX: number; toY: number }
   | { type: 'unitDied'; unitId: number; unit: UnitType; owner: number; facing: number; x: number; y: number }
   | { type: 'buildingDestroyed'; buildingId: number; cx: number; cy: number; w: number; h: number }
-  | { type: 'gameOver'; winner: number };
+  | { type: 'gameOver'; winner: number }
+  | { type: 'captured'; buildingId: number; player: number; from: number }
+  | { type: 'mended'; buildingId: number; player: number };
 
 export const cellIndex = (cx: number, cy: number): number => cy * MAP_W + cx;
 export const inBounds = (cx: number, cy: number): boolean =>

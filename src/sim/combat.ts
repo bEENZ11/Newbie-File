@@ -67,7 +67,8 @@ function acquire(world: World, unit: Unit, range2: number): number {
   }
   if (best !== 0) return best;
   for (const b of world.buildings) {
-    if (b.owner === unit.owner || b.hp <= 0) continue;
+    // Walls are only shot at on a direct order. Otherwise troops would stop to chip at every one.
+    if (b.owner === unit.owner || b.hp <= 0 || b.type === 'wall') continue;
     const d = distance2(unit, { building: b });
     if (d < bestD) {
       best = b.id;
@@ -245,7 +246,7 @@ function tickTurrets(world: World, events: SimEvent[]): void {
 
 /** A player is out once they have no buildings left and no Pioneer to start again. */
 function isDefeated(world: World, player: number): boolean {
-  if (world.buildings.some((b) => b.owner === player)) return false;
+  if (world.buildings.some((b) => b.owner === player && b.type !== 'wall')) return false;
   return !world.units.some((u) => u.owner === player && u.type === 'pioneer');
 }
 

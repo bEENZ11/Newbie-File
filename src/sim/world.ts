@@ -53,7 +53,7 @@ export function createWorld(seed: number, scenario: Scenario = {}): World {
     rng: seed | 0,
     nextId: 1,
     players: [newPlayer(true), newPlayer(scenario.outpost === true || aiPlayers.includes(1))],
-    ai: [0, 1].map((i) => (aiPlayers.includes(i) ? { wave: 0, lastWave: 0 } : null)),
+    ai: [0, 1].map((i) => (aiPlayers.includes(i) ? { wave: 0, lastWave: 0, trained: 0, built: 0 } : null)),
     units: [],
     buildings: [],
     terrain: new Uint8Array(MAP_W * MAP_H),
@@ -227,6 +227,7 @@ export function spawnUnit(world: World, type: UnitType, owner: number, cx: numbe
     chase: false,
     cooldown: 0,
     chaseTimer: 0,
+    capture: 0,
     job: type === 'harvester' ? 'seek' : 'none',
     cargo: 0,
     target: -1,
@@ -332,6 +333,8 @@ export function hashWorld(world: World): number {
   for (const ai of world.ai) {
     mix(ai ? ai.wave + 1 : 0);
     mix(ai ? ai.lastWave : 0);
+    mix(ai ? ai.trained : 0);
+    mix(ai ? ai.built : 0);
   }
   mix(world.rng);
   mix(world.nextId);
@@ -373,6 +376,7 @@ export function hashWorld(world: World): number {
     mix(u.chase ? 1 : 0);
     mix(u.cooldown);
     mix(u.chaseTimer);
+    mix(u.capture);
     mix(HARVEST_JOBS.indexOf(u.job));
     mix(u.cargo);
     mix(u.target);

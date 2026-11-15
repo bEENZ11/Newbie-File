@@ -27,6 +27,7 @@ import {
   type BuildingType,
   type SimEvent,
   type Unit,
+  type UnitType,
   type World,
 } from './types';
 
@@ -43,6 +44,10 @@ const WAVE_GAP = 1800;
 const ARMY_GROWTH = 900;
 /** Idle troops this far from home are sent back into the fight, in cells. */
 const STRAGGLER_RANGE = 14;
+
+/** The order in which it asks for units, so its army is a mixture and not all one thing. */
+const INFANTRY_MIX: UnitType[] = ['rifleman', 'rifleman', 'rocket', 'rifleman', 'grenadier'];
+const VEHICLE_MIX: UnitType[] = ['tank', 'scout', 'tank', 'heavy', 'artillery'];
 
 const cellX = (c: number): number => c % MAP_W;
 const cellY = (c: number): number => (c - (c % MAP_W)) / MAP_W;
@@ -63,6 +68,9 @@ function wanted(world: World, player: number, wave: number): [BuildingType, numb
     ['barracks', 1],
     ['factory', 1],
     ['turret', Math.min(5, 2 + (wave >> 1))],
+    // Later on, the buildings that unlock artillery and heavy armour.
+    ['radar', wave >= 1 ? 1 : 0],
+    ['tech', wave >= 2 ? 1 : 0],
   ];
 }
 
@@ -133,7 +141,7 @@ function nearestEnemy(world: World, player: number, x: number, y: number): numbe
   let best = 0;
   let bestD = 0;
   for (const b of world.buildings) {
-    if (b.owner === player) continue;
+    if (b.owner === player || b.type === 'wall') continue;
     const d = (b.cx - x) * (b.cx - x) + (b.cy - y) * (b.cy - y);
     if (best === 0 || d < bestD) {
       best = b.id;
@@ -211,12 +219,22 @@ function think(world: World, player: number, events: SimEvent[]): void {
     const queued = harvesters < count(world, player, 'refinery') * 2;
     if (queued && canTrain(world, player, 'harvester')) {
       trainUnit(world, player, 'harvester');
-    } else if (army.length < armyCap && p.credits > 700 && canTrain(world, player, 'tank')) {
-      trainUnit(world, player, 'tank');
+    } else if (army.length < armyCap) {
+      // Mostly light tanks, with heavier and longer-ranged vehicles mixed in once it can build them.
+      const wish = VEHICLE_MIX[ai.built % VEHICLE_MIX.length];
+      const pick = canTrain(world, player, wish) ? wish : 'tank';
+      if (canTrain(world, player, pick) && p.credits > UNIT_DEFS[pick].cost + 100) {
+        trainUnit(world, player, pick);
+        ai.built++;
+      }
     }
   }
-  if (infantry.items.length === 0 && army.length < armyCap && p.credits > 250) {
-    if (canTrain(world, player, 'rifleman')) trainUnit(world, player, 'rifleman');
+  if (infantry.items.length === 0 && army.length < armyCap) {
+    const pick = INFANTRY_MIX[ai.trained % INFANTRY_MIX.length];
+    if (canTrain(world, player, pick) && p.credits > UNIT_DEFS[pick].cost + 150) {
+      trainUnit(world, player, pick);
+      ai.trained++;
+    }
   }
 
   // Attack: once enough troops are standing idle at home, send them all.
