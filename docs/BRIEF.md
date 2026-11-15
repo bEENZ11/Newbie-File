@@ -234,7 +234,20 @@ There are two sides, Aegis and Dominion.
 | Aegis | Hold the line | Blue | The second Aegis player wears teal |
 | Dominion | Take what is owed | Red | The second Dominion player wears orange |
 
-For now both sides build the same things. Each faction has a list of units and buildings it cannot make, both currently empty, and the rules for what can be built already check those lists. Giving the factions their own character is a matter of filling them in and adding anything unique to one side.
+The two sides share every building, every defence and a common core of units: Rifleman, Rocket Soldier, Grenadier, Harvester, Scout Car and Light Tank. Each then has two soldiers and two vehicles of its own.
+
+| | Aegis | Dominion |
+| --- | --- | --- |
+| Specialist soldier | Sniper (340). Picks off infantry from eight cells away, useless against armour | Flame Trooper (180). Tough and quick, burns infantry and buildings at close range |
+| Infiltrator | Engineer (400). Captures an enemy building or mends one of ours | Saboteur (350). Blows up an enemy building from inside, doing 650 damage |
+| Support vehicle | Artillery (900). Out-ranges turrets, fragile | Flame Tank (800). Well armoured, ruinous to infantry and buildings up close |
+| Heavy armour | Guardian Tank (1,000). Faster, and out-ranges every other tank | Heavy Tank (1,100). The toughest thing on the field |
+
+In short, Aegis fights with range and precision, and Dominion with armour and fire. Every unique unit needs a Radar Station, except the two heavy tanks, which need a Tech Centre. The sidebar only offers what the player's own faction can build.
+
+An earlier idea gave the factions different defences and an economy bonus. It was dropped because the side with the stronger, longer-ranged defences would simply have been the stronger side. Sharing the defences keeps the difference in the armies, where it is easier to balance.
+
+**Balance.** The split was tuned by having the computer play itself. Over 40 games on 20 maps, with the starting positions swapped, Aegis won 18 and Dominion 21, with one unfinished. Each side's heavy tank narrowly beats an equal spend of Light Tanks, and the Guardian narrowly beats the Heavy Tank head to head. This is a reasonable starting point, not a finished balance: the computer does not use engineers or saboteurs, and massed riflemen are currently stronger for their cost than they should be.
 
 A game starts from a menu, where the player chooses:
 
@@ -250,7 +263,7 @@ The choices are remembered for next time. A game can also be started straight fr
 
 ### The shared roster
 
-Both sides currently draw on the same units and buildings. This is the common core that the factions will later be split from.
+These are the units and buildings from before the factions were split. The Engineer, Artillery and Heavy Tank now belong to one side each, as set out above.
 
 | Infantry | Cost | Needs | Role |
 | --- | --- | --- | --- |
@@ -297,6 +310,5 @@ Before building the construction stage we read the published Red Alert source an
 ## Decisions still open
 
 - **Name.** The game is titled "Aegis and Dominion" after its two factions until it has a name of its own.
-- **What sets the factions apart.** They share a roster today. Their different defences, specialist weapons and playing styles are still to be decided.
 - **Vehicle name.** Pioneer is a placeholder for the deploying base vehicle.
 - **Placement rule.** The brief allows a one-cell gap between buildings. We could loosen or tighten that once we can feel it.

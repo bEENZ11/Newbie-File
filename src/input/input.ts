@@ -1,7 +1,7 @@
 import { SIN_PITCH, type Renderer } from '../render/renderer';
 import type { Sim } from '../sim/sim';
 import { checkPlacement } from '../sim/production';
-import { BUILDING_DEFS, MAP_H, MAP_W, SUB, UNIT_DEFS, type Unit } from '../sim/types';
+import { BUILDING_DEFS, MAP_H, MAP_W, SUB, UNIT_DEFS, entersBuildings, isWall, type Unit } from '../sim/types';
 import { DIAMOND_YAW, LOCAL_PLAYER, ZOOM_MAX, ZOOM_MIN, placementOrigin, type UiState } from '../ui';
 
 const DRAG_THRESHOLD = 5;
@@ -210,13 +210,14 @@ export class Input {
     const picked = this.renderer.pickBuilding(ui, sx, sy);
     const building = this.sim.world.buildings.find((b) => b.id === picked);
 
-    // Engineers walk into a building: to capture an enemy's, or mend a damaged one of ours.
+    // Engineers and saboteurs walk into a building. An engineer captures an enemy's or mends a
+    // damaged one of ours. A saboteur blows up an enemy's, and the game ignores it for our own.
     const engineers = this.sim.world.units.filter(
-      (u) => ui.selectedUnits.has(u.id) && u.type === 'engineer',
+      (u) => ui.selectedUnits.has(u.id) && entersBuildings(u.type),
     );
     const worthEntering =
       building &&
-      building.type !== 'wall' &&
+      !isWall(building.type) &&
       (building.owner !== LOCAL_PLAYER || building.hp < BUILDING_DEFS[building.type].hp);
     if (building && worthEntering && engineers.length > 0) {
       this.sim.issue({

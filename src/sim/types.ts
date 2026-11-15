@@ -45,7 +45,12 @@ export type UnitType =
   | 'engineer'
   | 'scout'
   | 'artillery'
-  | 'heavy';
+  | 'heavy'
+  | 'guardian'
+  | 'sniper'
+  | 'flamer'
+  | 'saboteur'
+  | 'flametank';
 /** Fixed order, used for the sidebar and for hashing. New types go on the end. */
 export const UNIT_TYPES: readonly UnitType[] = [
   'pioneer',
@@ -58,6 +63,11 @@ export const UNIT_TYPES: readonly UnitType[] = [
   'scout',
   'artillery',
   'heavy',
+  'guardian',
+  'sniper',
+  'flamer',
+  'saboteur',
+  'flametank',
 ];
 
 /** Units are trained in two lines that run side by side. */
@@ -127,8 +137,8 @@ export interface FactionDef {
   /** A sentence or two of flavour, shown when choosing a side. */
   about: string;
   /**
-   * Units and buildings this faction cannot make. Both lists are empty while
-   * the two sides share a roster. This is where they will be told apart.
+   * Units and buildings this faction cannot make. Everything not listed is
+   * shared by both sides.
    */
   withoutUnits: readonly UnitType[];
   withoutBuildings: readonly BuildingType[];
@@ -139,14 +149,16 @@ export const FACTION_DEFS: Record<Faction, FactionDef> = {
     name: 'Aegis',
     motto: 'Hold the line',
     about: 'A defensive alliance of disciplined, well-equipped forces, formed to protect what remains.',
-    withoutUnits: [],
+    // Aegis's own units are the Sniper, Engineer, Guardian Tank and Artillery: range and precision.
+    withoutUnits: ['flamer', 'saboteur', 'heavy', 'flametank'],
     withoutBuildings: [],
   },
   dominion: {
     name: 'Dominion',
     motto: 'Take what is owed',
     about: 'An expansionist power that believes order comes from strength, and strength from conquest.',
-    withoutUnits: [],
+    // Dominion's own units are the Flame Trooper, Saboteur, Heavy Tank and Flame Tank: armour and fire.
+    withoutUnits: ['sniper', 'engineer', 'guardian', 'artillery'],
     withoutBuildings: [],
   },
 };
@@ -165,7 +177,7 @@ export interface WeaponDef {
   /** Ticks between shots. */
   cooldown: number;
   /** Only affects how the shot is drawn. */
-  kind: 'bullet' | 'shell' | 'rocket';
+  kind: 'bullet' | 'shell' | 'rocket' | 'flame';
   /** Percentage of damage dealt to each armour class. */
   versus: Record<ArmourClass, number>;
 }
@@ -206,6 +218,12 @@ export interface BuildingDef {
   requires: readonly BuildingType[];
   /** How far from the base it may be placed, in cells, if not the usual distance. */
   placeRange?: number;
+  /**
+   * True for walls of any kind. They block movement but are not part of the
+   * base: they cannot extend it, are not attacked without an order, cannot be
+   * captured, and do not keep a beaten side in the game.
+   */
+  wall?: boolean;
 }
 
 export const UNIT_DEFS: Record<UnitType, UnitDef> = {
@@ -362,11 +380,11 @@ export const UNIT_DEFS: Record<UnitType, UnitDef> = {
   heavy: {
     name: 'Heavy Tank',
     sight: 6,
-    hp: 600,
+    hp: 780,
     armour: 'vehicle',
     weapon: {
       range: 5,
-      damage: 60,
+      damage: 66,
       cooldown: 50,
       kind: 'shell',
       versus: { infantry: 40, vehicle: 100, building: 90 },
@@ -376,6 +394,95 @@ export const UNIT_DEFS: Record<UnitType, UnitDef> = {
     produceTicks: 360,
     queue: 'vehicle',
     requires: ['tech'],
+  },
+  // Aegis's heavy armour: lighter than Dominion's, but faster and it out-ranges every other tank.
+  guardian: {
+    name: 'Guardian Tank',
+    sight: 7,
+    hp: 520,
+    armour: 'vehicle',
+    weapon: {
+      range: 6,
+      damage: 50,
+      cooldown: 40,
+      kind: 'shell',
+      versus: { infantry: 40, vehicle: 100, building: 80 },
+    },
+    speed: 40,
+    cost: 1000,
+    produceTicks: 330,
+    queue: 'vehicle',
+    requires: ['tech'],
+  },
+  // Picks off infantry from far away. Useless against anything with armour or walls.
+  sniper: {
+    name: 'Sniper',
+    sight: 8,
+    hp: 40,
+    armour: 'infantry',
+    weapon: {
+      range: 8,
+      damage: 60,
+      cooldown: 85,
+      kind: 'bullet',
+      versus: { infantry: 100, vehicle: 5, building: 2 },
+    },
+    speed: 20,
+    cost: 340,
+    produceTicks: 160,
+    queue: 'infantry',
+    requires: ['radar'],
+  },
+  // Has to get close, but burns through infantry and buildings alike.
+  flamer: {
+    name: 'Flame Trooper',
+    sight: 4,
+    hp: 130,
+    armour: 'infantry',
+    weapon: {
+      range: 2,
+      damage: 12,
+      cooldown: 4,
+      kind: 'flame',
+      versus: { infantry: 120, vehicle: 40, building: 90 },
+    },
+    speed: 30,
+    cost: 180,
+    produceTicks: 120,
+    queue: 'infantry',
+    requires: ['radar'],
+  },
+  // Unarmed and quick. Slips into an enemy building and blows it up from inside.
+  saboteur: {
+    name: 'Saboteur',
+    sight: 5,
+    hp: 45,
+    armour: 'infantry',
+    weapon: null,
+    speed: 28,
+    cost: 350,
+    produceTicks: 160,
+    queue: 'infantry',
+    requires: ['radar'],
+  },
+  // Dominion's support vehicle: well armoured, and ruinous to infantry and buildings up close.
+  flametank: {
+    name: 'Flame Tank',
+    sight: 5,
+    hp: 560,
+    armour: 'vehicle',
+    weapon: {
+      range: 3,
+      damage: 16,
+      cooldown: 5,
+      kind: 'flame',
+      versus: { infantry: 120, vehicle: 50, building: 110 },
+    },
+    speed: 42,
+    cost: 800,
+    produceTicks: 300,
+    queue: 'vehicle',
+    requires: ['radar'],
   },
 };
 
@@ -500,6 +607,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     power: 0,
     requires: ['barracks'],
     placeRange: 5,
+    wall: true,
   },
 };
 
@@ -534,7 +642,7 @@ export interface Unit {
   cooldown: number;
   /** Ticks until it next re-plans its route to a moving target. */
   chaseTimer: number;
-  /** Engineers only: the building it is on its way to capture or mend, or 0. */
+  /** Engineers and saboteurs only: the building they are on their way into, or 0. */
   capture: number;
   // Harvesters only.
   job: HarvestJob;
@@ -657,7 +765,8 @@ export type SimEvent =
   | { type: 'buildingDestroyed'; buildingId: number; cx: number; cy: number; w: number; h: number }
   | { type: 'gameOver'; winner: number }
   | { type: 'captured'; buildingId: number; player: number; from: number }
-  | { type: 'mended'; buildingId: number; player: number };
+  | { type: 'mended'; buildingId: number; player: number }
+  | { type: 'sabotaged'; buildingId: number; player: number; from: number };
 
 export const cellIndex = (cx: number, cy: number): number => cy * MAP_W + cx;
 export const inBounds = (cx: number, cy: number): boolean =>
@@ -681,3 +790,10 @@ export const exitCell = (b: Building): { x: number; y: number } => ({
   x: b.cx + (b.type === 'factory' ? 1 : 0),
   y: b.cy + b.h,
 });
+
+/** True for walls of any kind. */
+export const isWall = (type: BuildingType): boolean => BUILDING_DEFS[type].wall === true;
+/** True for the units that do their work by walking into a building. */
+export const entersBuildings = (type: UnitType): boolean => type === 'engineer' || type === 'saboteur';
+/** Damage a saboteur's charges do. Enough to level most buildings outright. */
+export const SABOTAGE_DAMAGE = 650;

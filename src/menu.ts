@@ -1,7 +1,7 @@
 // The screen shown before a game starts, for choosing a side and the settings.
 
 import { css, setFactions, palettes } from './render/teams';
-import { DIFFICULTIES, FACTIONS, FACTION_DEFS, type Difficulty, type Faction } from './sim/types';
+import { DIFFICULTIES, FACTIONS, FACTION_DEFS, UNIT_DEFS, type Difficulty, type Faction } from './sim/types';
 
 export interface GameOptions {
   faction: Faction;
@@ -28,6 +28,11 @@ export const EMBLEMS: Record<Faction, string> = {
   dominion:
     '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M22 5h20l17 17v20L42 59H22L5 42V22z" fill="currentColor" opacity=".22"/><path d="M22 5h20l17 17v20L42 59H22L5 42V22z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M32 15l5 11 12 1-9 8 3 12-11-6-11 6 3-12-9-8 12-1z" fill="currentColor"/></svg>',
 };
+
+/** The units one side has that the other does not, as a readable list. */
+function ownUnits(faction: Faction): string {
+  return FACTION_DEFS[otherThan(faction)].withoutUnits.map((u) => UNIT_DEFS[u].name).join(', ');
+}
 
 function otherThan(faction: Faction): Faction {
   return FACTIONS.find((f) => f !== faction) ?? faction;
@@ -118,7 +123,8 @@ export function chooseOptions(): Promise<GameOptions> {
           `<span class="emblem">${EMBLEMS[f]}</span>` +
           `<span class="fname">${def.name}</span>` +
           `<span class="motto">${def.motto}</span>` +
-          `<span class="about">${def.about}</span>`;
+          `<span class="about">${def.about}</span>` +
+          `<span class="own">Only ${def.name} fields: ${ownUnits(f)}</span>`;
         card.addEventListener('click', () => {
           // Picking the side the opponent has swaps them over, which is usually what is wanted.
           if (state.enemy === f && state.faction !== f) state.enemy = state.faction;

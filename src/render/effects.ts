@@ -104,6 +104,16 @@ export class Effects {
       });
       flash.position.copy(from);
 
+      if (ev.kind === 'flame') {
+        // A jet of fire that widens as it reaches out, with a little smoke where it lands.
+        const reach = from.distanceTo(to);
+        for (let i = 1; i <= 5; i++) {
+          const at = from.clone().lerp(to, i / 5);
+          this.flame(at.x + (Math.random() - 0.5) * 0.15, at.y - 0.1, at.z + (Math.random() - 0.5) * 0.15, 0.07 + 0.035 * i, now + i * 14);
+        }
+        if (Math.random() < 0.35) this.puff(to.x, to.y, to.z, 0.12 + reach * 0.01, 0x2a2a2a, now + 90);
+        return;
+      }
       if (ev.kind === 'bullet') {
         // A streak of light along the line of fire.
         const tracer = this.add(BOX, 0xffe680, now, 90, (t, o) => {

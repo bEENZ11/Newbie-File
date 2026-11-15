@@ -1,4 +1,5 @@
-// Engineers, who capture and mend buildings, and Service Depots, which repair vehicles.
+// Engineers, who capture and mend buildings, saboteurs, who blow them up, and
+// Service Depots, which repair vehicles.
 
 import { isSettled, setDestination } from './movement';
 import { removeUnit } from './world';
@@ -8,8 +9,11 @@ import {
   REPAIR_COST_PERCENT,
   REPAIR_HP,
   REPAIR_INTERVAL,
+  SABOTAGE_DAMAGE,
   UNIT_DEFS,
+  entersBuildings,
   isActive,
+  isWall,
   type Building,
   type SimEvent,
   type Unit,
@@ -33,13 +37,18 @@ function gap(unit: Unit, b: Building): number {
   return Math.max(dx, dy);
 }
 
-/** Sends engineers into a building: to take it if it is the enemy's, or mend it if it is ours. */
+/**
+ * Sends engineers and saboteurs into a building. An engineer takes it if it is
+ * the enemy's or mends it if it is ours. A saboteur blows it up.
+ */
 export function orderCapture(world: World, player: number, unitIds: number[], buildingId: number): void {
   const b = world.buildings.find((x) => x.id === buildingId);
-  if (!b || b.type === 'wall') return;
+  if (!b || isWall(b.type)) return;
   for (const id of unitIds) {
     const unit = world.units.find((u) => u.id === id);
-    if (!unit || unit.owner !== player || unit.type !== 'engineer') continue;
+    if (!unit || unit.owner !== player || !entersBuildings(unit.type)) continue;
+    // A saboteur has no business in one of its own side's buildings.
+    if (unit.type === 'saboteur' && b.owner === player) continue;
     unit.capture = buildingId;
     unit.timer = 0;
   }
@@ -47,15 +56,19 @@ export function orderCapture(world: World, player: number, unitIds: number[], bu
 
 export function tickEngineers(world: World, events: SimEvent[]): void {
   for (const unit of world.units.slice()) {
-    if (unit.type !== 'engineer' || unit.capture === 0) continue;
+    if (!entersBuildings(unit.type) || unit.capture === 0) continue;
     const b = world.buildings.find((x) => x.id === unit.capture);
-    if (!b || b.selling || b.hp <= 0) {
+    if (!b || b.selling || b.hp <= 0 || (unit.type === 'saboteur' && b.owner === unit.owner)) {
       unit.capture = 0;
       continue;
     }
 
     if (gap(unit, b) <= 1 && unit.stepTo === -1) {
-      if (b.owner !== unit.owner) {
+      if (unit.type === 'saboteur') {
+        // The charges go off. Anything left standing is cleared up with the other casualties.
+        b.hp -= SABOTAGE_DAMAGE;
+        events.push({ type: 'sabotaged', buildingId: b.id, player: unit.owner, from: b.owner });
+      } else if (b.owner !== unit.owner) {
         const from = b.owner;
         b.owner = unit.owner;
         b.rally = -1;

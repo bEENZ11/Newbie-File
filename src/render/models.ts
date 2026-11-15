@@ -498,6 +498,11 @@ const UNIT_BUILDERS: Record<UnitType, () => THREE.Group> = {
   scout: buildScout,
   artillery: buildArtillery,
   heavy: buildTank,
+  guardian: buildTank,
+  sniper: buildRifleman,
+  flamer: buildRifleman,
+  saboteur: buildRifleman,
+  flametank: buildTank,
 };
 
 const templates = new Map<string, THREE.Group>();
@@ -520,6 +525,10 @@ const SOLDIER_KIT: Partial<Record<UnitType, { weapon: string; trousers?: number 
   rocket: { weapon: 'RocketLauncher' },
   grenadier: { weapon: 'GrenadeLauncher' },
   engineer: { weapon: 'Shovel', trousers: HAZARD },
+  sniper: { weapon: 'Sniper' },
+  flamer: { weapon: 'ShortCannon', trousers: 0xe8742a },
+  // Dressed in black, with only a knife.
+  saboteur: { weapon: 'Knife_1', trousers: 0x1c1c1c },
 };
 
 /** A copy of a pack material in a team's colour, made once per team and shared. */
@@ -589,17 +598,30 @@ function packSoldier(owner: number, weapon: string, trousers?: number): THREE.Gr
   return group;
 }
 
-/** The pack's tank. The heavy version is bigger, with its colours the other way round. */
-function packTank(length: number, heavy: boolean): THREE.Group | null {
+/** How each side's tanks are told apart: by size, and by which parts carry which colour. */
+const TANK_STYLES = {
+  // The shared Light Tank.
+  tank: { length: 1.3, body: 'main', trim: 'dark' },
+  // Dominion's Heavy Tank: much bigger and darker.
+  heavy: { length: 1.8, body: 'dark', trim: 'main' },
+  // Aegis's Guardian Tank: mid-sized, with pale armour panels.
+  guardian: { length: 1.5, body: 'main', trim: 'pale' },
+  // Dominion's Flame Tank: dark, with fuel-orange panels.
+  flametank: { length: 1.5, body: 'dark', trim: 'fuel' },
+} as const;
+type TankStyle = keyof typeof TANK_STYLES;
+
+function packTank(style: TankStyle): THREE.Group | null {
   const gltf = asset('tank');
   if (!gltf) return null;
   const model = gltf.scene.clone();
   // team is set by fromTemplate to the palette of whoever this is being built for.
-  dress(model, palettes.indexOf(team) + (heavy ? 100 : 0), {
-    Tank_Main: heavy ? team.dark : team.main,
-    Tank_Main2: heavy ? team.main : team.dark,
-  });
-  return fitted(model, 'length', length);
+  const colour = { main: team.main, dark: team.dark, pale: STEEL_LIGHT, fuel: 0xe8742a };
+  const look = TANK_STYLES[style];
+  // Each style needs its own recoloured materials, so keep them apart in the cache.
+  const slot = palettes.indexOf(team) + 100 * (1 + Object.keys(TANK_STYLES).indexOf(style));
+  dress(model, slot, { Tank_Main: colour[look.body], Tank_Main2: colour[look.trim] });
+  return fitted(model, 'length', look.length);
 }
 
 export function makeUnit(type: UnitType, owner: number): THREE.Group {
@@ -609,8 +631,9 @@ export function makeUnit(type: UnitType, owner: number): THREE.Group {
     const soldier = packSoldier(owner, kit.weapon, kit.trousers);
     if (soldier) return soldier;
   }
-  if (type === 'tank' && asset('tank')) return fromTemplate('packTank', owner, () => packTank(1.3, false)!);
-  if (type === 'heavy' && asset('tank')) return fromTemplate('packHeavy', owner, () => packTank(1.8, true)!);
+  if (type in TANK_STYLES && asset('tank')) {
+    return fromTemplate(`pack:${type}`, owner, () => packTank(type as TankStyle)!);
+  }
   return fromTemplate(type, owner, UNIT_BUILDERS[type]);
 }
 

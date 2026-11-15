@@ -6,6 +6,7 @@ export type SoundName =
   | 'cannon'
   | 'blast'
   | 'collapse'
+  | 'flame'
   | 'order'
   | 'click'
   | 'placed'
@@ -15,7 +16,7 @@ export type SoundName =
   | 'defeat';
 
 /** The shortest gap between two plays of the same sound, in milliseconds. */
-const MIN_GAP: Partial<Record<SoundName, number>> = { rifle: 45, cannon: 70, blast: 80, order: 60 };
+const MIN_GAP: Partial<Record<SoundName, number>> = { rifle: 45, cannon: 70, blast: 80, order: 60, flame: 120 };
 
 export class Sounds {
   private ctx: AudioContext | null = null;
@@ -104,6 +105,9 @@ export class Sounds {
       case 'blast':
         this.burst('lowpass', 900, 80, 0.45, 0.9 * v);
         this.tone('sine', 90, 30, 0.4, 0.7 * v);
+        break;
+      case 'flame':
+        this.burst('bandpass', 900, 500, 0.22, 0.35 * v);
         break;
       case 'collapse':
         this.burst('lowpass', 700, 50, 1.1, 1.0 * v);

@@ -112,7 +112,10 @@ function handleEvents(now: number): void {
   for (const ev of sim.events) {
     renderer.onEvent(ev, now);
     if (ev.type === 'shot') {
-      sounds.play(ev.kind === 'bullet' ? 'rifle' : 'cannon', loudness(ev.fromX / SUB, ev.fromY / SUB));
+      const sound = ev.kind === 'bullet' ? 'rifle' : ev.kind === 'flame' ? 'flame' : 'cannon';
+      sounds.play(sound, loudness(ev.fromX / SUB, ev.fromY / SUB));
+    } else if (ev.type === 'sabotaged') {
+      sounds.play('blast');
     } else if (ev.type === 'captured') {
       // Good news if we took it, bad news if it was ours.
       sounds.play(ev.player === LOCAL_PLAYER ? 'ready' : ev.from === LOCAL_PLAYER ? 'refused' : 'click');
@@ -171,6 +174,9 @@ function currentHint(): string {
   const chosen = world.units.filter((u) => ui.selectedUnits.has(u.id));
   if (chosen.length > 0 && chosen.every((u) => u.type === 'engineer')) {
     return 'Engineer selected. Right-click an enemy building to capture it, or a damaged one of yours to mend it';
+  }
+  if (chosen.length > 0 && chosen.every((u) => u.type === 'saboteur')) {
+    return 'Saboteur selected. Right-click an enemy building to blow it up from inside';
   }
   if (chosen.some((u) => UNIT_DEFS[u.type].weapon)) {
     return `${chosen.length} selected. Right-click ground to move, or an enemy to attack. Shift and a number saves the group`;

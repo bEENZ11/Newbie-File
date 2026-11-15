@@ -1,6 +1,6 @@
 // What each player can currently see, and what they have ever seen.
 
-import { BUILDING_SIGHT, MAP_H, MAP_W, UNIT_DEFS, cellIndex, type World } from './types';
+import { BUILDING_SIGHT, MAP_H, MAP_W, UNIT_DEFS, cellIndex, isWall, type World } from './types';
 
 /** How many ticks pass between refreshes. Sight does not need to be instant. */
 export const VISION_INTERVAL = 4;
@@ -29,7 +29,7 @@ export function updateVision(world: World): void {
     for (const b of world.buildings) {
       if (b.owner !== player) continue;
       // Walls are not lookouts. They see only the ground beside them.
-      const sight = b.type === 'wall' ? 1 : BUILDING_SIGHT + (b.w >> 1);
+      const sight = isWall(b.type) ? 1 : BUILDING_SIGHT + (b.w >> 1);
       reveal(v.visible, b.cx + (b.w >> 1), b.cy + (b.h >> 1), sight);
     }
     for (let i = 0; i < v.visible.length; i++) if (v.visible[i]) v.explored[i] = 1;

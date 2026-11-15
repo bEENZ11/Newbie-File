@@ -23,9 +23,11 @@ import {
   cellIndex,
   inBounds,
   isActive,
+  isWall,
   type Building,
   type BuildingType,
   type Difficulty,
+  type Faction,
   type SimEvent,
   type Unit,
   type UnitType,
@@ -52,8 +54,14 @@ const PACE: Record<Difficulty, { firstAttack: number; waveGap: number; armyGrowt
 const STRAGGLER_RANGE = 14;
 
 /** The order in which it asks for units, so its army is a mixture and not all one thing. */
-const INFANTRY_MIX: UnitType[] = ['rifleman', 'rifleman', 'rocket', 'rifleman', 'grenadier'];
-const VEHICLE_MIX: UnitType[] = ['tank', 'scout', 'tank', 'heavy', 'artillery'];
+const INFANTRY_MIX: Record<Faction, UnitType[]> = {
+  aegis: ['rifleman', 'rifleman', 'rocket', 'sniper', 'rifleman', 'grenadier'],
+  dominion: ['rifleman', 'flamer', 'rocket', 'rifleman', 'grenadier'],
+};
+const VEHICLE_MIX: Record<Faction, UnitType[]> = {
+  aegis: ['tank', 'scout', 'tank', 'guardian', 'artillery'],
+  dominion: ['tank', 'scout', 'tank', 'heavy', 'flametank'],
+};
 
 const cellX = (c: number): number => c % MAP_W;
 const cellY = (c: number): number => (c - (c % MAP_W)) / MAP_W;
@@ -74,7 +82,7 @@ function wanted(world: World, player: number, wave: number): [BuildingType, numb
     ['barracks', 1],
     ['factory', 1],
     ['turret', Math.min(5, 2 + (wave >> 1))],
-    // Later on, the buildings that unlock artillery and heavy armour.
+    // Later on, the buildings that unlock each side's own units.
     ['radar', wave >= 1 ? 1 : 0],
     ['tech', wave >= 2 ? 1 : 0],
   ];
@@ -147,7 +155,7 @@ function nearestEnemy(world: World, player: number, x: number, y: number): numbe
   let best = 0;
   let bestD = 0;
   for (const b of world.buildings) {
-    if (b.owner === player || b.type === 'wall') continue;
+    if (b.owner === player || isWall(b.type)) continue;
     const d = (b.cx - x) * (b.cx - x) + (b.cy - y) * (b.cy - y);
     if (best === 0 || d < bestD) {
       best = b.id;
@@ -228,7 +236,8 @@ function think(world: World, player: number, events: SimEvent[]): void {
       trainUnit(world, player, 'harvester');
     } else if (army.length < armyCap) {
       // Mostly light tanks, with heavier and longer-ranged vehicles mixed in once it can build them.
-      const wish = VEHICLE_MIX[ai.built % VEHICLE_MIX.length];
+      const mix = VEHICLE_MIX[p.faction];
+      const wish = mix[ai.built % mix.length];
       const pick = canTrain(world, player, wish) ? wish : 'tank';
       if (canTrain(world, player, pick) && p.credits > UNIT_DEFS[pick].cost + 100) {
         trainUnit(world, player, pick);
@@ -237,7 +246,9 @@ function think(world: World, player: number, events: SimEvent[]): void {
     }
   }
   if (infantry.items.length === 0 && army.length < armyCap) {
-    const pick = INFANTRY_MIX[ai.trained % INFANTRY_MIX.length];
+    const squad = INFANTRY_MIX[p.faction];
+    const wanted = squad[ai.trained % squad.length];
+    const pick = canTrain(world, player, wanted) ? wanted : 'rifleman';
     if (canTrain(world, player, pick) && p.credits > UNIT_DEFS[pick].cost + 150) {
       trainUnit(world, player, pick);
       ai.trained++;

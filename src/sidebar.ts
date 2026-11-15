@@ -6,6 +6,7 @@ import { canTrain, missingForUnit } from './sim/training';
 import {
   BUILDING_DEFS,
   BUILDING_TYPES,
+  FACTION_DEFS,
   UNIT_DEFS,
   UNIT_TYPES,
   type BuildingType,
@@ -60,11 +61,13 @@ export class Sidebar {
     this.sellButton = root.querySelector('#sell')!;
     this.repairButton = root.querySelector('#repair')!;
 
+    // Only what this player's faction can ever build is offered.
+    const roster = FACTION_DEFS[sim.world.players[LOCAL_PLAYER].faction];
     for (const type of BUILDING_TYPES) {
-      if (BUILDING_DEFS[type].produceTicks > 0) this.addStructure(type);
+      if (BUILDING_DEFS[type].produceTicks > 0 && !roster.withoutBuildings.includes(type)) this.addStructure(type);
     }
     for (const type of UNIT_TYPES) {
-      if (UNIT_DEFS[type].queue) this.addUnit(type);
+      if (UNIT_DEFS[type].queue && !roster.withoutUnits.includes(type)) this.addUnit(type);
     }
 
     this.sellButton.addEventListener('click', () => {

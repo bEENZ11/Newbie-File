@@ -84,6 +84,11 @@ const RING_SIZE: Record<UnitType, number> = {
   scout: 0.42,
   artillery: 0.52,
   heavy: 0.68,
+  guardian: 0.58,
+  sniper: 0.28,
+  flamer: 0.28,
+  saboteur: 0.28,
+  flametank: 0.58,
 };
 
 /** How many nuggets to draw on a cell, so a field visibly thins as it is mined. */

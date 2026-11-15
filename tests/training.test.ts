@@ -32,7 +32,8 @@ function grant(sim: Sim, type: BuildingType, cx: number, cy: number) {
 
 /** A powered base with a Barracks and War Factory, and no ore to distract harvesters. */
 function withBase(): Sim {
-  const sim = new Sim(1);
+  // Played as Dominion, whose roster has the Light Tank these tests train.
+  const sim = new Sim(1, { factions: ['dominion', 'aegis'] });
   sim.issue({ type: 'deploy', player: 0, unitId: sim.world.units[0].id });
   run(sim, BUILDING_DEFS.conyard.buildTicks + 2);
   sim.world.ore.fill(0);
@@ -49,7 +50,7 @@ const xy = (cell: number): [number, number] => [cell % MAP_W, Math.floor(cell / 
 
 describe('training', () => {
   it('needs the right building for each unit', () => {
-    const sim = new Sim(1);
+    const sim = new Sim(1, { factions: ['dominion', 'aegis'] });
     sim.issue({ type: 'deploy', player: 0, unitId: 1 });
     run(sim, 45);
     expect(canTrain(sim.world, 0, 'rifleman')).toBe(false);

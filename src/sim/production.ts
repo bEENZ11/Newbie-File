@@ -14,6 +14,7 @@ import {
   dockCell,
   inBounds,
   isActive,
+  isWall,
   type Building,
   type BuildingType,
   type Player,
@@ -203,7 +204,7 @@ export function checkPlacement(
     (b) =>
       b.owner === player &&
       !b.selling &&
-      b.type !== 'wall' &&
+      !isWall(b.type) &&
       cx < b.cx + b.w + range &&
       cx + def.w + range > b.cx &&
       cy < b.cy + b.h + range &&

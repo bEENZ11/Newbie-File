@@ -70,17 +70,20 @@ describe('the tech tree', () => {
   });
 
   it('gates the advanced units behind the right buildings', () => {
-    const sim = arena();
+    // Dominion, for the Heavy Tank at the top of its tree.
+    const sim = new Sim(1, { factions: ['dominion', 'aegis'] });
+    sim.world.ore.fill(0);
     building(sim, 'conyard', 0, 10, 10);
     building(sim, 'barracks', 0, 17, 10);
     building(sim, 'factory', 0, 20, 10);
     for (const u of ['rifleman', 'rocket', 'grenadier', 'tank', 'scout'] as const) {
       expect(canTrain(sim.world, 0, u)).toBe(true);
     }
-    for (const u of ['engineer', 'artillery', 'heavy'] as const) expect(canTrain(sim.world, 0, u)).toBe(false);
+    for (const u of ['flamer', 'saboteur', 'flametank', 'heavy'] as const) {
+      expect(canTrain(sim.world, 0, u)).toBe(false);
+    }
     building(sim, 'radar', 0, 14, 13);
-    expect(canTrain(sim.world, 0, 'engineer')).toBe(true);
-    expect(canTrain(sim.world, 0, 'artillery')).toBe(true);
+    for (const u of ['flamer', 'saboteur', 'flametank'] as const) expect(canTrain(sim.world, 0, u)).toBe(true);
     expect(canTrain(sim.world, 0, 'heavy')).toBe(false);
     building(sim, 'tech', 0, 17, 13);
     expect(canTrain(sim.world, 0, 'heavy')).toBe(true);
@@ -95,7 +98,7 @@ describe('the new weapons', () => {
     expect(hit('rifleman', 'tank')).toBe(2);
     expect(hit('scout', 'rifleman')).toBe(10);
     expect(hit('scout', 'tank')).toBe(3);
-    expect(hit('heavy', 'tank')).toBe(60);
+    expect(hit('heavy', 'tank')).toBe(66);
     expect(hit('grenadier', 'rifleman')).toBe(22);
   });
 
