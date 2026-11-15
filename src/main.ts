@@ -1,6 +1,7 @@
 import { Sounds } from './audio';
 import { Input } from './input/input';
 import { Minimap } from './minimap';
+import { loadAssets } from './render/assets';
 import { renderIcons } from './render/icons';
 import { Renderer } from './render/renderer';
 import { Sidebar } from './sidebar';
@@ -20,6 +21,9 @@ import { START_CX, START_CY, spawnUnit } from './sim/world';
 import { LOCAL_PLAYER, createUi, placementOrigin } from './ui';
 
 const TICK_MS = 1000 / TICK_RATE;
+
+// Fetch the pack models before anything is drawn. The game still starts if they fail.
+await loadAssets();
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const hintEl = document.getElementById('hint')!;

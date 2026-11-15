@@ -3,7 +3,9 @@
 // Buildings are centred on their footprint, with their front facing south (+z).
 
 import * as THREE from 'three';
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { BuildingType, UnitType } from '../sim/types';
+import { asset, sizeOf } from './assets';
 
 const STEEL = 0x66717c;
 const STEEL_DARK = 0x3a424b;
@@ -390,7 +392,88 @@ function fromTemplate(key: string, owner: number, build: () => THREE.Group): THR
   return template.clone();
 }
 
+/** A copy of a pack material in a team's colour, made once per team and shared. */
+const tinted = new Map<string, THREE.Material>();
+function teamMaterial(source: THREE.Material, owner: number, colour: number): THREE.Material {
+  const key = `${owner}:${source.uuid}`;
+  let m = tinted.get(key);
+  if (!m) {
+    m = source.clone();
+    (m as THREE.MeshStandardMaterial).color.setHex(colour);
+    tinted.set(key, m);
+  }
+  return m;
+}
+
+/** Repaints the parts of a pack model that carry its team colour, and switches on shadows. */
+function dress(root: THREE.Object3D, owner: number, colours: Record<string, number>): void {
+  root.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    o.castShadow = true;
+    o.receiveShadow = true;
+    const swap = (m: THREE.Material): THREE.Material =>
+      m.name in colours ? teamMaterial(m, owner, colours[m.name]) : m;
+    o.material = Array.isArray(o.material) ? o.material.map(swap) : swap(o.material);
+  });
+}
+
+/** Pack models face south and come in their own units, so turn them east and size them in cells. */
+function fitted(model: THREE.Object3D, measure: 'height' | 'length', target: number): THREE.Group {
+  const size = sizeOf(model);
+  model.scale.multiplyScalar(target / (measure === 'height' ? size.y : size.z));
+  model.rotation.y = Math.PI / 2;
+  const group = new THREE.Group();
+  group.add(model);
+  return group;
+}
+
+/** The weapons the pack's soldier carries. Only one is shown at a time. */
+const WEAPONS = [
+  'AK', 'GrenadeLauncher', 'Knife_1', 'Knife_2', 'Pistol', 'Revolver', 'Revolver_Small',
+  'RocketLauncher', 'ShortCannon', 'Shotgun', 'Shovel', 'SMG', 'Sniper', 'Sniper_2',
+];
+
+/**
+ * The animated soldier from the asset pack. userData.anim holds its animation
+ * player and the clips the game uses, which the renderer switches between.
+ */
+function packSoldier(owner: number, weapon: string): THREE.Group | null {
+  const gltf = asset('soldier');
+  if (!gltf) return null;
+  const model = cloneSkinned(gltf.scene);
+  const palette = PALETTES[owner % PALETTES.length];
+  dress(model, owner, { Character_Main: palette.main, Pants: palette.dark });
+  model.traverse((o) => {
+    if (WEAPONS.includes(o.name)) o.visible = o.name === weapon;
+    // Animated meshes move outside their original bounds, so never skip drawing them.
+    if (o instanceof THREE.SkinnedMesh) o.frustumCulled = false;
+  });
+  const group = fitted(model, 'height', 0.74);
+  const mixer = new THREE.AnimationMixer(model);
+  const clip = (name: string): THREE.AnimationAction | null => {
+    const found = gltf.animations.find((a) => a.name === name);
+    return found ? mixer.clipAction(found) : null;
+  };
+  group.userData.anim = { mixer, idle: clip('Idle'), run: clip('Run_Gun'), shoot: clip('Idle_Shoot'), die: clip('Death') };
+  return group;
+}
+
+function packTank(): THREE.Group | null {
+  const gltf = asset('tank');
+  if (!gltf) return null;
+  const model = gltf.scene.clone();
+  // team is set by fromTemplate to the palette of whoever this is being built for.
+  dress(model, PALETTES.indexOf(team), { Tank_Main: team.main, Tank_Main2: team.dark });
+  return fitted(model, 'length', 1.3);
+}
+
 export function makeUnit(type: UnitType, owner: number): THREE.Group {
+  // Animated models cannot share a template, so each soldier is built fresh.
+  if (type === 'rifleman') {
+    const soldier = packSoldier(owner, 'AK');
+    if (soldier) return soldier;
+  }
+  if (type === 'tank' && asset('tank')) return fromTemplate('packTank', owner, () => packTank()!);
   return fromTemplate(type, owner, UNIT_BUILDERS[type]);
 }
 

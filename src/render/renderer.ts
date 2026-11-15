@@ -19,6 +19,7 @@ import {
 } from '../sim/types';
 import { LOCAL_PLAYER, placementOrigin, type UiState } from '../ui';
 import { rallyPoint } from '../sim/training';
+import { asset, sizeOf } from './assets';
 import { Effects } from './effects';
 import { paintGround } from './ground';
 import { HealthBars } from './healthbars';
@@ -82,6 +83,17 @@ interface UnitView {
   cargo: THREE.Object3D | null;
   drum: THREE.Object3D | null;
   turret: THREE.Object3D | null;
+  anim: UnitAnim | null;
+  playing: THREE.AnimationAction | null;
+}
+
+/** The animation player on a pack model, and the clips the game switches between. */
+interface UnitAnim {
+  mixer: THREE.AnimationMixer;
+  idle: THREE.AnimationAction | null;
+  run: THREE.AnimationAction | null;
+  shoot: THREE.AnimationAction | null;
+  die: THREE.AnimationAction | null;
 }
 
 interface BuildingView {
@@ -126,6 +138,7 @@ export class Renderer {
   private fogTexture!: THREE.DataTexture;
   private fogTick = -1;
   private lastSmoke = 0;
+  private fallen: { obj: THREE.Object3D; mixer: THREE.AnimationMixer; at: number }[] = [];
   private effects = new Effects(this.scene);
   private healthBars = new HealthBars(this.scene);
 
@@ -269,9 +282,51 @@ export class Renderer {
       this.scene.add(mesh);
     };
     add(new THREE.DodecahedronGeometry(1), 0x7b7f86, rocks);
+    if (this.addPackTrees(world)) return;
     add(new THREE.CylinderGeometry(1, 1, 1, 6), 0x5a4030, trunks);
     add(new THREE.ConeGeometry(1, 1, 7), 0x2c6431, crowns);
     add(new THREE.ConeGeometry(1, 1, 7), 0x3d7d3c, tops);
+  }
+
+  /** Plants trees from the asset pack in the woods. Returns false if the pack is missing. */
+  private addPackTrees(world: World): boolean {
+    const kinds = (['tree1', 'tree2', 'tree3', 'tree4'] as const)
+      .map((name) => asset(name))
+      .filter((g): g is NonNullable<typeof g> => g !== null);
+    if (kinds.length === 0) return false;
+
+    const spots: THREE.Matrix4[][] = kinds.map(() => []);
+    const q = new THREE.Quaternion();
+    const up = new THREE.Vector3(0, 1, 0);
+    for (let y = 0; y < MAP_H; y++) {
+      for (let x = 0; x < MAP_W; x++) {
+        if (world.terrain[cellIndex(x, y)] !== TREES) continue;
+        const k = Math.floor(noise(x, y, 200) * kinds.length) % kinds.length;
+        const height = 1.5 + noise(x, y, 201) * 0.8;
+        const scale = height / sizeOf(kinds[k].scene).y;
+        q.setFromAxisAngle(up, noise(x, y, 202) * Math.PI * 2);
+        spots[k].push(
+          new THREE.Matrix4().compose(
+            new THREE.Vector3(x + 0.3 + noise(x, y, 203) * 0.4, 0, y + 0.3 + noise(x, y, 204) * 0.4),
+            q,
+            new THREE.Vector3(scale, scale, scale),
+          ),
+        );
+      }
+    }
+    kinds.forEach((gltf, k) => {
+      if (spots[k].length === 0) return;
+      // Each tree is a trunk and a crown. Draw every copy of each part in one go.
+      gltf.scene.traverse((part) => {
+        if (!(part instanceof THREE.Mesh)) return;
+        const mesh = new THREE.InstancedMesh(part.geometry, part.material, spots[k].length);
+        spots[k].forEach((m, i) => mesh.setMatrixAt(i, m.clone().multiply(part.matrixWorld)));
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        this.scene.add(mesh);
+      });
+    });
+    return true;
   }
 
   private makeTerrain(world: World): THREE.Mesh {
@@ -354,6 +409,7 @@ export class Renderer {
     this.syncOverlays(world, ui, now);
     this.syncHealth(world, ui, alpha);
     this.syncSmoke(world, now);
+    this.syncFallen(now, dt);
     this.effects.update(now);
 
     this.gl.render(this.scene, this.camera);
@@ -433,7 +489,7 @@ export class Renderer {
         ring.renderOrder = 2;
         obj.add(ring);
         this.scene.add(obj);
-        view = { obj, ring, angle: target, cargo, drum, turret };
+        view = { obj, ring, angle: target, cargo, drum, turret, anim: (obj.userData.anim as UnitAnim) ?? null, playing: null };
         this.unitViews.set(u.id, view);
       }
       // Turn smoothly towards the new heading, taking the short way round.
@@ -456,6 +512,17 @@ export class Renderer {
         view.cargo.scale.y = Math.max(0.02, u.cargo / HARVEST_CAPACITY);
       }
       if (view.drum && u.job === 'harvest') view.drum.rotation.y += dt * 9;
+      if (view.anim) {
+        // Run while moving, fire while it has a target in its sights, otherwise stand easy.
+        const moving = u.stepTo !== -1;
+        const next = moving ? view.anim.run : u.attack !== 0 ? view.anim.shoot : view.anim.idle;
+        if (next && next !== view.playing) {
+          next.reset().fadeIn(0.12).play();
+          view.playing?.fadeOut(0.12);
+          view.playing = next;
+        }
+        view.anim.mixer.update(dt);
+      }
       if (view.turret) {
         // Swing the turret onto the target, or back to straight ahead.
         let want = 0;
@@ -528,6 +595,33 @@ export class Renderer {
     }
   }
 
+  /** A soldier who has just been killed falls where he stood, then sinks away. */
+  private addFallen(ev: Extract<SimEvent, { type: 'unitDied' }>, now: number): void {
+    const obj = makeUnit(ev.unit, ev.owner);
+    const anim = obj.userData.anim as UnitAnim | undefined;
+    if (!anim?.die) return;
+    obj.position.set(ev.x / SUB, 0, ev.y / SUB);
+    obj.rotation.y = (-ev.facing * Math.PI) / 4;
+    anim.die.setLoop(THREE.LoopOnce, 1);
+    anim.die.clampWhenFinished = true;
+    anim.die.play();
+    this.scene.add(obj);
+    this.fallen.push({ obj, mixer: anim.mixer, at: now });
+  }
+
+  private syncFallen(now: number, dt: number): void {
+    this.fallen = this.fallen.filter((f) => {
+      const age = now - f.at;
+      if (age > 4000) {
+        this.scene.remove(f.obj);
+        return false;
+      }
+      f.mixer.update(dt);
+      if (age > 2600) f.obj.position.y = -((age - 2600) / 1400) * 0.5;
+      return true;
+    });
+  }
+
   /** Where a unit or building is, in cells, for aiming turrets at it. */
   private positionOf(world: World, id: number): { x: number; z: number } | null {
     const u = world.units.find((x) => x.id === id);
@@ -589,6 +683,7 @@ export class Renderer {
   /** Passes a simulation event on to the battle effects. */
   onEvent(ev: SimEvent, now: number): void {
     this.effects.onEvent(ev, now);
+    if (ev.type === 'unitDied' && ev.unit === 'rifleman') this.addFallen(ev, now);
   }
 
   /** Health bars for anything selected or damaged. */

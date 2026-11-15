@@ -419,7 +419,7 @@ export type SimEvent =
   | { type: 'unitReady'; player: number; unitId: number; unit: UnitType }
   // Positions here are in sub-cell units, for drawing the shot.
   | { type: 'shot'; kind: 'bullet' | 'shell'; fromX: number; fromY: number; toX: number; toY: number }
-  | { type: 'unitDied'; unitId: number; unit: UnitType; x: number; y: number }
+  | { type: 'unitDied'; unitId: number; unit: UnitType; owner: number; facing: number; x: number; y: number }
   | { type: 'buildingDestroyed'; buildingId: number; cx: number; cy: number; w: number; h: number }
   | { type: 'gameOver'; winner: number };
 

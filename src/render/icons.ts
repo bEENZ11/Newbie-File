@@ -31,6 +31,12 @@ export function renderIcons(): Record<string, string> {
 
   const shoot = (key: string, obj: THREE.Object3D, turn: number): void => {
     obj.rotation.y = turn;
+    // Animated models start in a stiff default pose, so put them at ease first.
+    const anim = obj.userData.anim as { mixer: THREE.AnimationMixer; idle: THREE.AnimationAction | null } | undefined;
+    if (anim?.idle) {
+      anim.idle.play();
+      anim.mixer.update(0.3);
+    }
     scene.add(obj);
     obj.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(obj);

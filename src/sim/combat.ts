@@ -182,7 +182,15 @@ export function tickCombat(world: World, events: SimEvent[]): void {
   for (const unit of world.units.slice()) {
     if (unit.hp > 0) continue;
     removeUnit(world, unit);
-    events.push({ type: 'unitDied', unitId: unit.id, unit: unit.type, x: unit.x, y: unit.y });
+    events.push({
+      type: 'unitDied',
+      unitId: unit.id,
+      unit: unit.type,
+      owner: unit.owner,
+      facing: unit.facing,
+      x: unit.x,
+      y: unit.y,
+    });
   }
   for (const b of world.buildings.slice()) {
     if (b.hp > 0) continue;
