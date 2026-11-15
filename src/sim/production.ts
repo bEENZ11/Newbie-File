@@ -4,6 +4,7 @@ import { addBuilding, removeBuilding, spawnUnit } from './world';
 import {
   BUILDING_DEFS,
   BUILD_RANGE,
+  FACTION_DEFS,
   MIN_POWER_RATE,
   REPAIR_COST_PERCENT,
   REPAIR_HP,
@@ -46,6 +47,7 @@ function owns(world: World, player: number, type: BuildingType): boolean {
 export function canProduce(world: World, player: number, type: BuildingType): boolean {
   const def = BUILDING_DEFS[type];
   if (def.produceTicks <= 0) return false;
+  if (FACTION_DEFS[world.players[player].faction].withoutBuildings.includes(type)) return false;
   if (!owns(world, player, 'conyard')) return false;
   return def.requires.every((r) => owns(world, player, r));
 }

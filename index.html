@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RTS Prototype</title>
+    <title>Aegis and Dominion</title>
     <style>
       :root {
         --sidebar: 236px;
@@ -31,6 +31,185 @@
         height: 100vh;
         pointer-events: none;
         background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 58%, rgba(0, 0, 0, 0.34) 100%);
+      }
+      /* Until a game is under way, only the menu shows. */
+      body:not([data-playing]) #sidebar,
+      body:not([data-playing]) #hint,
+      body:not([data-playing]) #vignette {
+        visibility: hidden;
+      }
+      #menu {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow-y: auto;
+        background:
+          radial-gradient(ellipse at 20% 0%, rgba(63, 134, 224, 0.16), transparent 55%),
+          radial-gradient(ellipse at 80% 100%, rgba(216, 72, 60, 0.16), transparent 55%), #0b0d10;
+      }
+      #menu-box {
+        width: min(760px, calc(100vw - 32px));
+        padding: 24px 0;
+      }
+      #menu h1 {
+        margin: 0;
+        font-size: 44px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        text-align: center;
+      }
+      #menu h1 span {
+        font-size: 18px;
+        font-weight: 500;
+        letter-spacing: 0.2em;
+        color: var(--muted);
+        vertical-align: middle;
+        margin: 0 6px;
+      }
+      #menu .strap {
+        margin: 6px 0 22px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 15px;
+      }
+      #factions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .faction {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        padding: 20px 18px 18px;
+        text-align: center;
+        color: #e8ecef;
+        background: #161b20;
+        border: 2px solid var(--line);
+        border-radius: 10px;
+        cursor: pointer;
+        transition: border-color 0.15s, background 0.15s, transform 0.15s;
+      }
+      .faction:hover {
+        border-color: rgba(255, 255, 255, 0.4);
+      }
+      .faction.on {
+        border-color: var(--team);
+        background: color-mix(in srgb, var(--team) 16%, #161b20);
+        transform: translateY(-2px);
+      }
+      .faction .emblem {
+        width: 74px;
+        height: 74px;
+        color: var(--team);
+      }
+      .faction .emblem svg {
+        width: 100%;
+        height: 100%;
+      }
+      .faction .fname {
+        margin-top: 6px;
+        font-size: 26px;
+        font-weight: 750;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .faction .motto {
+        font-size: 13px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--team);
+      }
+      .faction .about {
+        margin-top: 8px;
+        font-size: 13.5px;
+        line-height: 1.45;
+        color: #b9c3cb;
+      }
+      .settings {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px 24px;
+        margin-top: 22px;
+      }
+      .choice {
+        display: flex;
+        gap: 6px;
+        margin-top: 6px;
+      }
+      .choice button,
+      #seed {
+        flex: 1;
+        padding: 8px 6px;
+        font: inherit;
+        font-size: 13.5px;
+        color: #cfd6dc;
+        background: #161b20;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+      }
+      .choice button {
+        cursor: pointer;
+      }
+      .choice button.on {
+        color: #fff;
+        background: #2f3a45;
+        border-color: rgba(255, 255, 255, 0.55);
+      }
+      #seed {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        margin-top: 6px;
+      }
+      .hintline {
+        margin-top: 5px;
+        font-size: 11.5px;
+        color: var(--muted);
+        min-height: 14px;
+      }
+      #start {
+        display: block;
+        width: 100%;
+        margin-top: 24px;
+        padding: 14px;
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #fff;
+        background: var(--team, #3f86e0);
+        border: 0;
+        border-radius: 7px;
+        cursor: pointer;
+      }
+      #start:hover {
+        filter: brightness(1.12);
+      }
+      #menu .keys {
+        margin: 16px 0 0;
+        text-align: center;
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+      #badge {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 15px;
+        font-weight: 750;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      #badge svg {
+        width: 22px;
+        height: 22px;
       }
       #game {
         display: block;
@@ -61,8 +240,8 @@
         overflow-y: auto;
       }
       #minimap {
-        width: 184px;
-        height: 184px;
+        width: 168px;
+        height: 168px;
         flex: none;
         align-self: center;
         background: #000;
@@ -276,6 +455,13 @@
         animation: none;
         box-shadow: inset 0 0 0 3px #4fd16a;
       }
+      /* What a locked item needs can run to two short lines. */
+      .build[data-state='locked'] .status {
+        white-space: normal;
+        font-size: 10px;
+        line-height: 1.1;
+        padding: 0 2px;
+      }
       .build[data-state='locked'],
       .build[data-state='busy'] {
         cursor: default;
@@ -377,9 +563,42 @@
     </style>
   </head>
   <body>
+    <div id="menu">
+      <div id="menu-box">
+        <h1>Aegis <span>and</span> Dominion</h1>
+        <p class="strap">A skirmish for control of the frontier. Choose your side.</p>
+        <div id="factions"></div>
+        <div class="settings">
+          <div>
+            <div class="label">Opponent</div>
+            <div id="enemy" class="choice"></div>
+          </div>
+          <div>
+            <div class="label">Difficulty</div>
+            <div id="difficulty" class="choice"></div>
+            <div id="difficulty-note" class="hintline"></div>
+          </div>
+          <div>
+            <div class="label">Starting credits</div>
+            <div id="credits-choice" class="choice"></div>
+          </div>
+          <div>
+            <div class="label">Map number</div>
+            <input id="seed" inputmode="numeric" placeholder="Random" />
+            <div class="hintline">The same number always gives the same map</div>
+          </div>
+        </div>
+        <button id="start">Start</button>
+        <p class="keys">
+          Left-click selects. Right-click moves or attacks. Arrow keys or the screen edge scroll, and the mouse wheel
+          zooms. V turns the view, and M mutes the sound.
+        </p>
+      </div>
+    </div>
     <canvas id="game"></canvas>
     <div id="vignette"></div>
     <aside id="sidebar">
+      <div id="badge"></div>
       <canvas id="minimap" width="192" height="192"></canvas>
       <div>
         <div class="label">Credits</div>

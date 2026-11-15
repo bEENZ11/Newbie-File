@@ -4,6 +4,7 @@ import { setDestination } from './movement';
 import { advance, productionRate } from './production';
 import { freeCellNear, spawnUnit } from './world';
 import {
+  FACTION_DEFS,
   MAP_W,
   MAX_QUEUE,
   QUEUE_BUILDING,
@@ -41,6 +42,7 @@ export function missingForUnit(world: World, player: number, unit: UnitType): Bu
 
 export function canTrain(world: World, player: number, unit: UnitType): boolean {
   const def = UNIT_DEFS[unit];
+  if (FACTION_DEFS[world.players[player].faction].withoutUnits.includes(unit)) return false;
   return def.queue !== null && missingForUnit(world, player, unit).length === 0;
 }
 

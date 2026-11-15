@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { BuildingType, UnitType } from '../sim/types';
 import { asset, sizeOf } from './assets';
+import { palettes } from './teams';
 
 const STEEL = 0x66717c;
 const STEEL_DARK = 0x3a424b;
@@ -15,20 +16,8 @@ const RUBBER = 0x1c1f23;
 const HAZARD = 0xe8b730;
 const GLASS = 0xbfe3ff;
 
-interface Palette {
-  main: number;
-  dark: number;
-  light: number;
-}
-
-/** Team colours, by player number. */
-const PALETTES: Palette[] = [
-  { main: 0x3f86e0, dark: 0x24569c, light: 0x9cc4f7 },
-  { main: 0xd8483c, dark: 0x8f2a22, light: 0xf5a59c },
-];
-
 /** The palette the model currently being built should use. */
-let team = PALETTES[0];
+let team = palettes[0];
 
 const materials = new Map<number, THREE.MeshStandardMaterial>();
 /** One shared material per colour. Glass is shiny, rubber is dull, the rest sit in between. */
@@ -518,7 +507,7 @@ function fromTemplate(key: string, owner: number, build: () => THREE.Group): THR
   const id = `${key}:${owner}`;
   let template = templates.get(id);
   if (!template) {
-    team = PALETTES[owner % PALETTES.length];
+    team = palettes[owner % palettes.length];
     template = build();
     templates.set(id, template);
   }
@@ -582,7 +571,7 @@ function packSoldier(owner: number, weapon: string, trousers?: number): THREE.Gr
   const gltf = asset('soldier');
   if (!gltf) return null;
   const model = cloneSkinned(gltf.scene);
-  const palette = PALETTES[owner % PALETTES.length];
+  const palette = palettes[owner % palettes.length];
   // Engineers wear high-visibility trousers, so they stand out from the fighting troops.
   dress(model, owner + (trousers ? 200 : 0), { Character_Main: palette.main, Pants: trousers ?? palette.dark });
   model.traverse((o) => {
@@ -606,7 +595,7 @@ function packTank(length: number, heavy: boolean): THREE.Group | null {
   if (!gltf) return null;
   const model = gltf.scene.clone();
   // team is set by fromTemplate to the palette of whoever this is being built for.
-  dress(model, PALETTES.indexOf(team) + (heavy ? 100 : 0), {
+  dress(model, palettes.indexOf(team) + (heavy ? 100 : 0), {
     Tank_Main: heavy ? team.dark : team.main,
     Tank_Main2: heavy ? team.main : team.dark,
   });

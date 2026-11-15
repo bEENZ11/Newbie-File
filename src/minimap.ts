@@ -1,6 +1,7 @@
 // The radar map in the sidebar: the whole battlefield at a glance.
 
 import { SIN_PITCH } from './render/renderer';
+import { palettes, rgb } from './render/teams';
 import { hasRadar } from './sim/production';
 import type { Sim } from './sim/sim';
 import { MAP_H, MAP_W, ROCK, TREES, WATER, cellIndex } from './sim/types';
@@ -14,15 +15,6 @@ const GROUND_BY_TYPE: Record<number, RGB> = {
   [WATER]: [44, 92, 140],
   [TREES]: [34, 62, 34],
 };
-const TEAM: RGB[] = [
-  [90, 160, 255],
-  [255, 84, 70],
-];
-const TEAM_BUILDING: RGB[] = [
-  [52, 110, 200],
-  [190, 52, 44],
-];
-
 export class Minimap {
   private ctx: CanvasRenderingContext2D;
   private cells = document.createElement('canvas');
@@ -95,9 +87,9 @@ export class Minimap {
     const data = this.image.data;
 
     const put = (i: number, c: RGB, shade: number): void => {
-      data[i * 4] = c[0] * shade;
-      data[i * 4 + 1] = c[1] * shade;
-      data[i * 4 + 2] = c[2] * shade;
+      data[i * 4] = Math.min(255, c[0] * shade);
+      data[i * 4 + 1] = Math.min(255, c[1] * shade);
+      data[i * 4 + 2] = Math.min(255, c[2] * shade);
       data[i * 4 + 3] = 255;
     };
 
@@ -109,12 +101,12 @@ export class Minimap {
       for (let y = b.cy; y < b.cy + b.h; y++) {
         for (let x = b.cx; x < b.cx + b.w; x++) {
           const i = cellIndex(x, y);
-          if (b.owner === LOCAL_PLAYER || explored[i]) put(i, TEAM_BUILDING[b.owner % 2], 1);
+          if (b.owner === LOCAL_PLAYER || explored[i]) put(i, rgb(palettes[b.owner % palettes.length].dark), 1.25);
         }
       }
     }
     for (const u of world.units) {
-      if (u.owner === LOCAL_PLAYER || visible[u.cell]) put(u.cell, TEAM[u.owner % 2], 1);
+      if (u.owner === LOCAL_PLAYER || visible[u.cell]) put(u.cell, rgb(palettes[u.owner % palettes.length].light), 1);
     }
     this.cellCtx.putImageData(this.image, 0, 0);
 

@@ -225,6 +225,29 @@ The enemy starts with a Construction Yard in the south-east and plays by the sam
 
 Shots, cannon fire, explosions, collapsing buildings, order confirmations and build notifications are all synthesised in the browser, so there are no audio files to load or license. Sounds from the fog are silent, and those off-screen are quieter. M mutes.
 
+### Factions and the start menu
+
+There are two sides, Aegis and Dominion.
+
+| Faction | Motto | Colours | In a mirror match |
+| --- | --- | --- | --- |
+| Aegis | Hold the line | Blue | The second Aegis player wears teal |
+| Dominion | Take what is owed | Red | The second Dominion player wears orange |
+
+For now both sides build the same things. Each faction has a list of units and buildings it cannot make, both currently empty, and the rules for what can be built already check those lists. Giving the factions their own character is a matter of filling them in and adding anything unique to one side.
+
+A game starts from a menu, where the player chooses:
+
+- **Their faction**, from two cards showing each side's emblem, motto and a line of background.
+- **The opponent's faction.** Choosing the side the opponent already has swaps the two over. Picking the same for both gives a mirror match.
+- **Difficulty.** Easy, Normal or Hard, which sets how soon the computer first attacks (six, four, or two and a half minutes), how often it attacks after that, and how fast its army grows.
+- **Starting credits:** 5,000, 10,000 or 20,000.
+- **Map number.** Left blank for a random map. The same number always gives the same map.
+
+The choices are remembered for next time. A game can also be started straight from a link, such as `?faction=dominion&difficulty=easy&seed=3`, which skips the menu. Play again returns to the menu.
+
+"Aegis and Dominion" is used as the title for now, since the game has no other name yet.
+
 ### The shared roster
 
 Both sides currently draw on the same units and buildings. This is the common core that the factions will later be split from.
@@ -273,6 +296,7 @@ Before building the construction stage we read the published Red Alert source an
 
 ## Decisions still open
 
-- **Name and setting.** The game needs a working title and a theme for its factions.
+- **Name.** The game is titled "Aegis and Dominion" after its two factions until it has a name of its own.
+- **What sets the factions apart.** They share a roster today. Their different defences, specialist weapons and playing styles are still to be decided.
 - **Vehicle name.** Pioneer is a placeholder for the deploying base vehicle.
 - **Placement rule.** The brief allows a one-cell gap between buildings. We could loosen or tighten that once we can feel it.

@@ -117,6 +117,44 @@ export const BUILDING_TYPES: readonly BuildingType[] = [
   'wall',
 ];
 
+/** The two sides a player can command. */
+export type Faction = 'aegis' | 'dominion';
+export const FACTIONS: readonly Faction[] = ['aegis', 'dominion'];
+
+export interface FactionDef {
+  name: string;
+  motto: string;
+  /** A sentence or two of flavour, shown when choosing a side. */
+  about: string;
+  /**
+   * Units and buildings this faction cannot make. Both lists are empty while
+   * the two sides share a roster. This is where they will be told apart.
+   */
+  withoutUnits: readonly UnitType[];
+  withoutBuildings: readonly BuildingType[];
+}
+
+export const FACTION_DEFS: Record<Faction, FactionDef> = {
+  aegis: {
+    name: 'Aegis',
+    motto: 'Hold the line',
+    about: 'A defensive alliance of disciplined, well-equipped forces, formed to protect what remains.',
+    withoutUnits: [],
+    withoutBuildings: [],
+  },
+  dominion: {
+    name: 'Dominion',
+    motto: 'Take what is owed',
+    about: 'An expansionist power that believes order comes from strength, and strength from conquest.',
+    withoutUnits: [],
+    withoutBuildings: [],
+  },
+};
+
+/** How hard the computer opponent pushes. */
+export type Difficulty = 'easy' | 'normal' | 'hard';
+export const DIFFICULTIES: readonly Difficulty[] = ['easy', 'normal', 'hard'];
+
 /** What a target is made of, which decides how much each weapon hurts it. */
 export type ArmourClass = 'infantry' | 'vehicle' | 'building';
 
@@ -559,6 +597,7 @@ export interface UnitQueue {
 export interface Player {
   /** True if this player started the game with anything on the map. */
   active: boolean;
+  faction: Faction;
   credits: number;
   production: Production | null;
   queues: Record<QueueKind, UnitQueue>;
@@ -582,7 +621,7 @@ export interface World {
   /** The id of the unit holding each cell, or 0. Derived from units. */
   occupied: Int32Array;
   /** Per player: the computer opponent's memory, or null for a person. */
-  ai: ({ wave: number; lastWave: number; trained: number; built: number } | null)[];
+  ai: ({ wave: number; lastWave: number; trained: number; built: number; level: Difficulty } | null)[];
   /** Per player: cells in view right now, and cells seen at any time. */
   vision: { visible: Uint8Array; explored: Uint8Array }[];
 }

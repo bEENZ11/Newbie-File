@@ -4,6 +4,8 @@ import { updateVision } from './vision';
 import {
   BUILDING_DEFS,
   BUILDING_TYPES,
+  DIFFICULTIES,
+  FACTIONS,
   HARVEST_JOBS,
   UNIT_TYPES,
   MAP_H,
@@ -20,6 +22,8 @@ import {
   UNIT_DEFS,
   type Building,
   type BuildingType,
+  type Difficulty,
+  type Faction,
   type Player,
   type Unit,
   type UnitQueue,
@@ -40,6 +44,12 @@ export interface Scenario {
    * the far corner. Player 0 can also be listed, to watch two computers play.
    */
   ai?: number[];
+  /** Which side each player commands. Player 0 is Aegis and player 1 Dominion unless told otherwise. */
+  factions?: [Faction, Faction];
+  /** How hard the computer plays. Normal if not given. */
+  difficulty?: Difficulty;
+  /** Credits each player starts with, if not the usual amount. */
+  credits?: number;
 }
 
 const OUTPOST_X = 46;
@@ -47,13 +57,19 @@ const OUTPOST_Y = 44;
 
 export function createWorld(seed: number, scenario: Scenario = {}): World {
   const aiPlayers = scenario.ai ?? [];
+  const factions = scenario.factions ?? ['aegis', 'dominion'];
+  const credits = scenario.credits ?? STARTING_CREDITS;
+  const level = scenario.difficulty ?? 'normal';
   const world: World = {
     tick: 0,
     winner: -1,
     rng: seed | 0,
     nextId: 1,
-    players: [newPlayer(true), newPlayer(scenario.outpost === true || aiPlayers.includes(1))],
-    ai: [0, 1].map((i) => (aiPlayers.includes(i) ? { wave: 0, lastWave: 0, trained: 0, built: 0 } : null)),
+    players: [
+      newPlayer(true, factions[0], credits),
+      newPlayer(scenario.outpost === true || aiPlayers.includes(1), factions[1], credits),
+    ],
+    ai: [0, 1].map((i) => (aiPlayers.includes(i) ? { wave: 0, lastWave: 0, trained: 0, built: 0, level } : null)),
     units: [],
     buildings: [],
     terrain: new Uint8Array(MAP_W * MAP_H),
@@ -74,10 +90,11 @@ export function createWorld(seed: number, scenario: Scenario = {}): World {
   return world;
 }
 
-function newPlayer(active: boolean): Player {
+function newPlayer(active: boolean, faction: Faction, credits: number): Player {
   return {
     active,
-    credits: STARTING_CREDITS,
+    faction,
+    credits,
     production: null,
     queues: { infantry: emptyQueue(), vehicle: emptyQueue() },
   };
@@ -335,10 +352,12 @@ export function hashWorld(world: World): number {
     mix(ai ? ai.lastWave : 0);
     mix(ai ? ai.trained : 0);
     mix(ai ? ai.built : 0);
+    mix(ai ? DIFFICULTIES.indexOf(ai.level) : 0);
   }
   mix(world.rng);
   mix(world.nextId);
   for (const p of world.players) {
+    mix(FACTIONS.indexOf(p.faction));
     mix(p.credits);
     const prod = p.production;
     mix(prod ? 1 : 0);

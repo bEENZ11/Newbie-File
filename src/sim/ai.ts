@@ -25,6 +25,7 @@ import {
   isActive,
   type Building,
   type BuildingType,
+  type Difficulty,
   type SimEvent,
   type Unit,
   type UnitType,
@@ -36,12 +37,17 @@ const THINK_INTERVAL = 20;
 /** Armed units kept at home as a garrison. */
 const GARRISON = 3;
 const MAX_ARMY = 22;
-/** No attack comes before this, giving a new player time to set up. Four minutes. */
-const FIRST_ATTACK = 4800;
-/** The shortest gap between one wave and the next. Ninety seconds. */
-const WAVE_GAP = 1800;
-/** The army is allowed one more unit for every this many ticks played. */
-const ARMY_GROWTH = 900;
+/**
+ * How each difficulty paces the computer, in ticks at twenty a second.
+ * firstAttack: nothing comes before this, giving the player time to set up.
+ * waveGap: the shortest wait between one wave and the next.
+ * armyGrowth: the army may have one more unit for every this many ticks played.
+ */
+const PACE: Record<Difficulty, { firstAttack: number; waveGap: number; armyGrowth: number }> = {
+  easy: { firstAttack: 7200, waveGap: 2700, armyGrowth: 1400 },
+  normal: { firstAttack: 4800, waveGap: 1800, armyGrowth: 900 },
+  hard: { firstAttack: 3000, waveGap: 1200, armyGrowth: 550 },
+};
 /** Idle troops this far from home are sent back into the fight, in cells. */
 const STRAGGLER_RANGE = 14;
 
@@ -212,7 +218,8 @@ function think(world: World, player: number, events: SimEvent[]): void {
   const harvesters = mine.filter((u) => u.type === 'harvester').length;
   const army = mine.filter((u) => UNIT_DEFS[u.type].weapon);
   // The army builds up gradually instead of all at once.
-  const armyCap = Math.min(MAX_ARMY, 4 + Math.floor(world.tick / ARMY_GROWTH));
+  const pace = PACE[ai.level];
+  const armyCap = Math.min(MAX_ARMY, 4 + Math.floor(world.tick / pace.armyGrowth));
   const vehicles = p.queues.vehicle;
   const infantry = p.queues.infantry;
   if (vehicles.items.length === 0) {
@@ -247,7 +254,7 @@ function think(world: World, player: number, events: SimEvent[]): void {
   };
   const atHome = idle.filter(near);
   const waveSize = Math.min(14, 4 + ai.wave * 2);
-  const rested = world.tick >= FIRST_ATTACK && world.tick - ai.lastWave >= WAVE_GAP;
+  const rested = world.tick >= pace.firstAttack && world.tick - ai.lastWave >= pace.waveGap;
   if (rested && atHome.length >= waveSize + GARRISON) {
     // The newest units go, leaving the longest-serving ones as the garrison.
     const strike = atHome.slice(GARRISON).map((u) => u.id);

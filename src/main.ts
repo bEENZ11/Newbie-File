@@ -1,6 +1,8 @@
 import { Sounds } from './audio';
 import { Input } from './input/input';
+import { EMBLEMS, chooseOptions } from './menu';
 import { Minimap } from './minimap';
+import { css, palettes, setFactions } from './render/teams';
 import { loadAssets } from './render/assets';
 import { renderIcons } from './render/icons';
 import { Renderer } from './render/renderer';
@@ -9,6 +11,7 @@ import { checkPlacement, powerOf } from './sim/production';
 import { Sim } from './sim/sim';
 import {
   BUILDING_DEFS,
+  FACTION_DEFS,
   HARVEST_CAPACITY,
   MAP_H,
   MAP_W,
@@ -26,22 +29,40 @@ const TICK_MS = 1000 / TICK_RATE;
 // Fetch the pack models before anything is drawn. The game still starts if they fail.
 await loadAssets();
 
+// Wait on the menu for the player to pick a side, then paint the armies to match.
+const options = await chooseOptions();
+setFactions([options.faction, options.enemy]);
+document.body.dataset.playing = 'yes';
+
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const hintEl = document.getElementById('hint')!;
 const dragEl = document.getElementById('dragbox')!;
 const bannerEl = document.getElementById('banner')!;
 const againEl = document.getElementById('again')!;
-againEl.addEventListener('click', () => location.reload());
+againEl.addEventListener('click', () => {
+  // Back to the menu. Drop any choices carried in the address, so it is shown.
+  location.href = location.pathname;
+});
 window.addEventListener('keydown', (e) => {
   if ((e.key === 'm' || e.key === 'M') && !e.repeat) sounds.toggleMute();
 });
 
-// The seed is chosen outside the simulation. Add ?seed=123 to replay a layout.
-const seedParam = Number(new URLSearchParams(location.search).get('seed'));
-const seed = Number.isInteger(seedParam) && seedParam !== 0 ? seedParam : Date.now() & 0x7fffffff;
+// A skirmish against the computer, on a map with rocks, lakes and woods,
+// set up the way the player asked for on the menu.
+const sim = new Sim(options.seed, {
+  ai: [1],
+  terrain: true,
+  factions: [options.faction, options.enemy],
+  difficulty: options.difficulty,
+  credits: options.credits,
+});
+const foeName = FACTION_DEFS[options.enemy].name;
 
-// A skirmish against the computer, on a map with rocks, lakes and woods.
-const sim = new Sim(seed, { ai: [1], terrain: true });
+// Show whose side this is at the top of the sidebar.
+const badge = document.getElementById('badge')!;
+badge.innerHTML = `${EMBLEMS[options.faction]}<span>${FACTION_DEFS[options.faction].name}</span>`;
+badge.style.color = css(palettes[LOCAL_PLAYER].light);
+document.getElementById('sidebar')!.style.setProperty('--team', css(palettes[LOCAL_PLAYER].main));
 const sounds = new Sounds();
 
 // A small blip confirms each order as it is given.
@@ -136,7 +157,7 @@ function currentHint(): string {
   const prod = player.production;
 
   if (world.winner !== -1) {
-    return world.winner === LOCAL_PLAYER ? 'The enemy base is destroyed' : 'Your base has been wiped out';
+    return world.winner === LOCAL_PLAYER ? `${foeName} is defeated` : `${foeName} has wiped out your base`;
   }
 
   if (ui.placing) {
@@ -182,7 +203,7 @@ function currentHint(): string {
   }
   if (prod) return `Building ${BUILDING_DEFS[prod.type].name}. Right-click it to put it on hold`;
   if (powerOf(world, LOCAL_PLAYER).low) return 'Low power is slowing production. Build a Power Plant';
-  return 'The enemy base lies to the south-east, and it will come for you. Build defences and an army';
+  return `The ${foeName} base lies to the south-east, and it will come for you. Build defences and an army`;
 }
 
 function updateHud(): void {
