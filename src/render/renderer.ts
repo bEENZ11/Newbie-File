@@ -23,7 +23,8 @@ import { asset, sizeOf } from './assets';
 import { Effects } from './effects';
 import { paintGround } from './ground';
 import { HealthBars } from './healthbars';
-import { frameGeometry, makeBuilding, makeGhost, makeRallyFlag, makeUnit } from './models';
+import { SIGNATURE, frameGeometry, makeBuilding, makeGhost, makeLabel, makeRallyFlag, makeUnit } from './models';
+import { GEM_CELL, ORE_CELL } from '../sim/world';
 
 // The view is 3D with a fixed camera: looking north, tilted down at the ground.
 // One cell is one world unit, x runs east and z runs south.
@@ -93,9 +94,12 @@ const RING_SIZE: Record<UnitType, number> = {
   flametank: 0.58,
 };
 
+/** How high each building's name tag floats, where the default would sit inside the model. */
+const LABEL_HEIGHT: Partial<Record<BuildingType, number>> = { conyard: 3.1, refinery: 3.0, factory: 2.4, radar: 2.5, power: 1.8 };
+
 /** How many nuggets to draw on a cell, so a field visibly thins as it is mined. */
-function oreNuggets(amount: number): number {
-  return amount <= 0 ? 0 : 1 + Math.min(5, Math.floor(amount / 170));
+function oreNuggets(amount: number, gems: boolean): number {
+  return amount <= 0 ? 0 : Math.min(MAX_NUGGETS, Math.ceil((amount * MAX_NUGGETS) / (gems ? GEM_CELL : ORE_CELL)));
 }
 
 interface UnitView {
@@ -125,6 +129,7 @@ interface BuildingView {
   head: THREE.Object3D | null;
   spin: THREE.Object3D | null;
   frame: THREE.Mesh;
+  label: THREE.Sprite | null;
   /** Whose colours the model is painted in, so it can be rebuilt if the building changes hands. */
   owner: number;
 }
@@ -311,7 +316,7 @@ export class Renderer {
       mesh.receiveShadow = true;
       this.scene.add(mesh);
     };
-    add(new THREE.DodecahedronGeometry(1), 0x7b7f86, rocks);
+    add(new THREE.DodecahedronGeometry(1), world.map === 'desert' ? 0xa5846a : 0x7b7f86, rocks);
     if (this.addPackTrees(world)) return;
     add(new THREE.CylinderGeometry(1, 1, 1, 6), 0x5a4030, trunks);
     add(new THREE.ConeGeometry(1, 1, 7), 0x2c6431, crowns);
@@ -332,7 +337,8 @@ export class Renderer {
       for (let x = 0; x < MAP_W; x++) {
         if (world.terrain[cellIndex(x, y)] !== TREES) continue;
         const k = Math.floor(noise(x, y, 200) * kinds.length) % kinds.length;
-        const height = 1.5 + noise(x, y, 201) * 0.8;
+        // Desert scrub is lower than woodland.
+        const height = (world.map === 'desert' ? 0.9 : 1.5) + noise(x, y, 201) * 0.8;
         const scale = height / sizeOf(kinds[k].scene).y;
         q.setFromAxisAngle(up, noise(x, y, 202) * Math.PI * 2);
         spots[k].push(
@@ -360,7 +366,7 @@ export class Renderer {
   }
 
   private makeTerrain(world: World): THREE.Mesh {
-    const tex = new THREE.CanvasTexture(paintGround(world.terrain, TERRAIN_TEXELS));
+    const tex = new THREE.CanvasTexture(paintGround(world.terrain, TERRAIN_TEXELS, world.map));
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = this.gl.capabilities.getMaxAnisotropy();
     const mesh = new THREE.Mesh(
@@ -494,7 +500,7 @@ export class Renderer {
     this.oreMeshes.forEach(({ mesh, cells }, kind) => {
       let touched = false;
       for (const cell of cells) {
-        const count = oreNuggets(world.ore[cell]);
+        const count = oreNuggets(world.ore[cell], kind === 1);
         if (count === this.oreSeen[cell]) continue;
         this.oreSeen[cell] = count;
         const slot = this.oreSlot[cell];
@@ -611,8 +617,15 @@ export class Renderer {
         const frame = new THREE.Mesh(frameGeometry(b.w + 0.1, b.h + 0.1, 0.06), this.frameMat);
         frame.position.y = 0.03;
         obj.add(frame);
+        // Walls would be a forest of tags, and a turret is plain enough.
+        let label: THREE.Sprite | null = null;
+        if (b.type !== 'wall' && b.type !== 'turret') {
+          label = makeLabel(BUILDING_DEFS[b.type].name, SIGNATURE[b.type]);
+          label.position.y = LABEL_HEIGHT[b.type] ?? 1.7;
+          obj.add(label);
+        }
         this.scene.add(obj);
-        view = { obj, stages, arm, head, spin, frame, owner: b.owner };
+        view = { obj, stages, arm, head, spin, frame, label, owner: b.owner };
         this.buildingViews.set(b.id, view);
       }
       // Build-up: each part rises out of the ground in turn.
@@ -636,6 +649,7 @@ export class Renderer {
       view.frame.material = mending ? this.repairMat : this.frameMat;
       this.repairMat.opacity = 0.55 + 0.45 * Math.sin(now * 0.008);
       view.frame.visible = ui.selectedBuilding === b.id || mending;
+      if (view.label) view.label.visible = ui.labels && p >= 1;
       // Enemy buildings stay on the map once they have been discovered.
       view.obj.visible = b.owner === LOCAL_PLAYER || footprintSeen(vision.explored, b);
     }

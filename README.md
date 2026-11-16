@@ -23,9 +23,11 @@ Then open the address it prints. Add `?seed=123` to the address to get the same 
 - Gun turrets, building repair, fog of war and a radar map.
 - Generated terrain with rocks, lakes and woods.
 - A computer opponent that builds a base, harvests, and attacks in growing waves.
-- Synthesised sound effects.
+- Sound effects from Kenney's CC0 packs, with synthesised gunfire.
 - Two factions, Aegis and Dominion, each with two soldiers and two vehicles of its own, chosen from a start menu.
-- A 128 by 128 map with big lakes, plentiful ore and richer gem fields in the middle.
+- Three 128 by 128 maps: lakes, five islands joined by causeways, and a rocky desert. Ore fields shrink as they are mined.
+- Extra Pioneers from the War Factory once a Service Depot is built, and faster production with each extra Construction Yard, Barracks or War Factory.
+- Colour bands and name tags on buildings (L toggles the tags).
 - Games for two or four players: 1 v 1, 2 v 2 with a computer ally, or a free for all.
 - A satellite uplink from the Tech Centre that reveals the whole map.
 - Online play for up to four people, joined by a four-letter code.

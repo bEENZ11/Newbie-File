@@ -88,6 +88,21 @@ describe('a room', () => {
     expect(seats.map((s) => s.team)).toEqual([0, 1, 1, 0]);
   });
 
+  it('lets only the host choose the map, and starts everyone on it', () => {
+    const room = new Room('ABCD');
+    const a = player();
+    const b = player();
+    room.join(a);
+    room.join(b);
+    expect(a.last('lobby').map).toBe('lakes');
+    room.receive(b, { t: 'map', map: 'desert' });
+    expect(a.last('lobby').map).toBe('lakes');
+    room.receive(a, { t: 'map', map: 'islands' });
+    expect(b.last('lobby').map).toBe('islands');
+    room.receive(a, { t: 'start' });
+    expect(b.last('start').info.map).toBe('islands');
+  });
+
   it('hands every player the same orders, in the same turn, in the same order', () => {
     const room = new Room('ABCD');
     const a = player();

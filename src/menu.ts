@@ -3,7 +3,16 @@
 import { RoomClient, type Lobby } from './net/client';
 import type { StartInfo } from './net/protocol';
 import { css, setFactions, palettes } from './render/teams';
-import { DIFFICULTIES, FACTIONS, FACTION_DEFS, UNIT_DEFS, type Difficulty, type Faction } from './sim/types';
+import {
+  DIFFICULTIES,
+  FACTIONS,
+  FACTION_DEFS,
+  MAP_KINDS,
+  UNIT_DEFS,
+  type Difficulty,
+  type Faction,
+  type MapKind,
+} from './sim/types';
 import type { Seat } from './sim/world';
 
 /** How many players, and who is on whose side. */
@@ -18,6 +27,7 @@ const MODE_NOTES: Record<Mode, string> = {
 
 export interface GameOptions {
   mode: Mode;
+  map: MapKind;
   faction: Faction;
   enemy: Faction;
   difficulty: Difficulty;
@@ -26,6 +36,13 @@ export interface GameOptions {
   /** Set for a game against other people: the room, which seat is ours, and what the room decided. */
   online?: { client: RoomClient; you: number; info: StartInfo };
 }
+
+const MAP_NAMES: Record<MapKind, string> = { lakes: 'Lakeland', islands: 'Five Islands', desert: 'Dry Reach' };
+const MAP_NOTES: Record<MapKind, string> = {
+  lakes: 'Green country with big lakes, woods and ore everywhere',
+  islands: 'An island each, joined by narrow causeways, with the gems on a fifth in the middle',
+  desert: 'Open sand broken up by rocks, scrub and small pools',
+};
 
 const CREDIT_CHOICES = [5000, 10000, 20000];
 const DIFFICULTY_NAMES: Record<Difficulty, string> = { easy: 'Easy', normal: 'Normal', hard: 'Hard' };
@@ -89,8 +106,10 @@ function fromAddress(): GameOptions | null {
   const difficulty = q.get('difficulty') as Difficulty | null;
   const seed = Number(q.get('seed'));
   const mode = q.get('mode') as Mode | null;
+  const map = q.get('map') as MapKind | null;
   return {
     mode: mode && MODES.includes(mode) ? mode : 'duel',
+    map: map && MAP_KINDS.includes(map) ? map : 'lakes',
     faction,
     enemy: enemy && FACTIONS.includes(enemy) ? enemy : otherThan(faction),
     difficulty: difficulty && DIFFICULTIES.includes(difficulty) ? difficulty : 'normal',
@@ -111,6 +130,7 @@ export function chooseOptions(): Promise<GameOptions> {
   const last = remembered();
   const state: GameOptions = {
     mode: last.mode && MODES.includes(last.mode) ? last.mode : 'duel',
+    map: last.map && MAP_KINDS.includes(last.map) ? last.map : 'lakes',
     faction: last.faction && FACTIONS.includes(last.faction) ? last.faction : 'aegis',
     enemy: last.enemy && FACTIONS.includes(last.enemy) ? last.enemy : 'dominion',
     difficulty: last.difficulty && DIFFICULTIES.includes(last.difficulty) ? last.difficulty : 'normal',
@@ -122,6 +142,8 @@ export function chooseOptions(): Promise<GameOptions> {
   const enemyRow = menu.querySelector('#enemy')!;
   const modeRow = menu.querySelector('#mode')!;
   const modeNote = menu.querySelector('#mode-note')!;
+  const mapRow = menu.querySelector('#map')!;
+  const mapNote = menu.querySelector('#map-note')!;
   const difficultyRow = menu.querySelector('#difficulty')!;
   const creditsRow = menu.querySelector('#credits-choice')!;
   const note = menu.querySelector('#difficulty-note')!;
@@ -176,6 +198,8 @@ export function chooseOptions(): Promise<GameOptions> {
     mark(enemyRow, state.enemy);
     mark(modeRow, state.mode);
     modeNote.textContent = MODE_NOTES[state.mode];
+    mark(mapRow, state.map);
+    mapNote.textContent = MAP_NOTES[state.map];
     // Preview the colours as they will be in the game, for however many are playing.
     setFactions(seatsFor(state).map((s) => s.faction));
     mark(difficultyRow, state.difficulty);
@@ -191,6 +215,7 @@ export function chooseOptions(): Promise<GameOptions> {
   }
 
   choices(modeRow, MODES, (m) => MODE_NAMES[m], (m) => (state.mode = m));
+  choices(mapRow, MAP_KINDS, (m) => MAP_NAMES[m], (m) => (state.map = m));
   choices(enemyRow, FACTIONS, (f) => FACTION_DEFS[f].name, (f) => (state.enemy = f));
   choices(difficultyRow, DIFFICULTIES, (d) => DIFFICULTY_NAMES[d], (d) => (state.difficulty = d));
   choices(creditsRow, CREDIT_CHOICES, (c) => c.toLocaleString('en-GB'), (c) => (state.credits = c));
@@ -225,6 +250,11 @@ export function chooseOptions(): Promise<GameOptions> {
       choices(row, MODES, (m) => MODE_NAMES[m], (m) => client?.chooseMode(m));
       mark(row, lobby.mode);
       for (const b of row.querySelectorAll<HTMLButtonElement>('button')) b.disabled = !mine.host;
+      const maps = lobbyBox.querySelector('#lobby-map')!;
+      choices(maps, MAP_KINDS, (m) => MAP_NAMES[m], (m) => client?.chooseMap(m));
+      mark(maps, lobby.map);
+      for (const b of maps.querySelectorAll<HTMLButtonElement>('button')) b.disabled = !mine.host;
+      lobbyBox.querySelector('#lobby-map-note')!.textContent = MAP_NOTES[lobby.map];
       const go = lobbyBox.querySelector<HTMLButtonElement>('#lobby-start')!;
       go.disabled = !mine.host;
       go.textContent = mine.host ? 'Start the game' : 'Waiting for the host to start';
@@ -253,6 +283,7 @@ export function chooseOptions(): Promise<GameOptions> {
         const foe = info.seats.find((seat, i) => i !== you && seat.team !== info.seats[you].team);
         resolve({
           mode: info.mode,
+          map: info.map,
           faction: info.seats[you].faction,
           enemy: foe?.faction ?? otherThan(info.seats[you].faction),
           difficulty: info.difficulty,

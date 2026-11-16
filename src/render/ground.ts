@@ -1,8 +1,9 @@
 // Paints the ground texture: grass with dry and lush patches, forest floor,
-// bare rock, and lakes with sandy shores. Everything is blended smoothly
+// bare rock, and lakes with sandy shores. The desert map swaps the grass for
+// sand, with scrub where the woods would be and green banks round its pools. Everything is blended smoothly
 // across cell boundaries so the map reads as land, not as a grid.
 
-import { MAP_H, MAP_W, ROCK, TREES, WATER } from '../sim/types';
+import { MAP_H, MAP_W, ROCK, TREES, WATER, type MapKind } from '../sim/types';
 
 type RGB = readonly [number, number, number];
 
@@ -15,6 +16,28 @@ const STONE_DARK: RGB = [86, 82, 76];
 const SAND: RGB = [182, 166, 116];
 const SHALLOW: RGB = [62, 138, 156];
 const DEEP: RGB = [26, 72, 120];
+
+/** The colours that change from one kind of map to another. */
+interface Theme {
+  groundA: RGB;
+  groundB: RGB;
+  patch: RGB;
+  woods: RGB;
+  stone: RGB;
+  stoneDark: RGB;
+  shore: RGB;
+}
+const GREEN: Theme = { groundA: GRASS_A, groundB: GRASS_B, patch: DRY, woods: FOREST, stone: STONE, stoneDark: STONE_DARK, shore: SAND };
+const DESERT: Theme = {
+  groundA: [206, 176, 118],
+  groundB: [224, 198, 140],
+  patch: [186, 146, 96],
+  woods: [128, 136, 72],
+  stone: [164, 128, 96],
+  stoneDark: [112, 84, 66],
+  // Pools in the desert have green banks.
+  shore: [110, 138, 70],
+};
 
 function hash(x: number, y: number, salt: number): number {
   let h = Math.imul(x * 374761393 + y * 668265263 + salt * 2246822519, 3266489917);
@@ -47,7 +70,8 @@ const step = (a: number, b: number, x: number): number => {
   return t * t * (3 - 2 * t);
 };
 
-export function paintGround(terrain: Uint8Array, texels: number): HTMLCanvasElement {
+export function paintGround(terrain: Uint8Array, texels: number, map: MapKind = 'lakes'): HTMLCanvasElement {
+  const theme = map === 'desert' ? DESERT : GREEN;
   const canvas = document.createElement('canvas');
   canvas.width = MAP_W * texels;
   canvas.height = MAP_H * texels;
@@ -88,29 +112,29 @@ export function paintGround(terrain: Uint8Array, texels: number): HTMLCanvasElem
       const wu = u + (smooth(u * 0.9, v * 0.9, 7) - 0.5) * 0.8;
       const wv = v + (smooth(u * 0.9, v * 0.9, 8) - 0.5) * 0.8;
 
-      c[0] = GRASS_A[0];
-      c[1] = GRASS_A[1];
-      c[2] = GRASS_A[2];
-      mix(GRASS_B, clouds(u * 0.16, v * 0.16, 1));
-      mix(DRY, step(0.56, 0.74, clouds(u * 0.09, v * 0.09, 20)) * 0.55);
+      c[0] = theme.groundA[0];
+      c[1] = theme.groundA[1];
+      c[2] = theme.groundA[2];
+      mix(theme.groundB, clouds(u * 0.16, v * 0.16, 1));
+      mix(theme.patch, step(0.56, 0.74, clouds(u * 0.09, v * 0.09, 20)) * 0.55);
 
       const trees = presence(TREES, wu, wv);
-      if (trees > 0.05) mix(FOREST, step(0.15, 0.6, trees));
+      if (trees > 0.05) mix(theme.woods, step(0.15, 0.6, trees));
 
       const rock = presence(ROCK, wu, wv);
       if (rock > 0.05) {
         const grain = clouds(u * 1.4, v * 1.4, 30);
         const blend = step(0.28, 0.55, rock);
         mix([
-          STONE_DARK[0] + (STONE[0] - STONE_DARK[0]) * grain,
-          STONE_DARK[1] + (STONE[1] - STONE_DARK[1]) * grain,
-          STONE_DARK[2] + (STONE[2] - STONE_DARK[2]) * grain,
+          theme.stoneDark[0] + (theme.stone[0] - theme.stoneDark[0]) * grain,
+          theme.stoneDark[1] + (theme.stone[1] - theme.stoneDark[1]) * grain,
+          theme.stoneDark[2] + (theme.stone[2] - theme.stoneDark[2]) * grain,
         ], blend);
       }
 
       const water = presence(WATER, wu, wv);
       if (water > 0.2) {
-        mix(SAND, step(0.22, 0.4, water));
+        mix(theme.shore, step(0.22, 0.4, water));
         if (water > 0.42) {
           const depth = step(0.5, 0.9, water);
           const ripple = (smooth(u * 2.2, v * 5.5, 40) - 0.5) * 14;

@@ -14,7 +14,7 @@ import {
   type ServerMessage,
   type StartInfo,
 } from '../src/net/protocol';
-import type { Command, Faction } from '../src/sim/types';
+import type { Command, Faction, MapKind } from '../src/sim/types';
 
 export interface Connection {
   send(message: ServerMessage): void;
@@ -28,10 +28,12 @@ interface Member {
 
 const FACTIONS: Faction[] = ['aegis', 'dominion'];
 const MODES: Mode[] = ['duel', 'teams', 'ffa'];
+const MAPS: MapKind[] = ['lakes', 'islands', 'desert'];
 
 export class Room {
   private members: Member[] = [];
   private mode: Mode = 'duel';
+  private map: MapKind = 'lakes';
   private started = false;
   private turn = 0;
   private pending: Command[] = [];
@@ -74,7 +76,7 @@ export class Room {
       .map((m) => ({ seat: m.seat, faction: m.faction, host: m.seat === this.host }))
       .sort((a, b) => a.seat - b.seat);
     for (const m of this.members) {
-      m.conn.send({ t: 'lobby', code: this.code, you: m.seat, mode: this.mode, players });
+      m.conn.send({ t: 'lobby', code: this.code, you: m.seat, mode: this.mode, map: this.map, players });
     }
   }
 
@@ -115,6 +117,11 @@ export class Room {
         this.mode = message.mode;
         this.sendLobby();
         break;
+      case 'map':
+        if (this.started || who.seat !== this.host || !MAPS.includes(message.map)) return;
+        this.map = message.map;
+        this.sendLobby();
+        break;
       case 'start':
         if (this.started || who.seat !== this.host) return;
         this.start();
@@ -145,6 +152,7 @@ export class Room {
     const info: StartInfo = {
       seed: 1 + Math.floor(this.random() * 0x7ffffffe),
       mode,
+      map: this.map,
       difficulty: 'normal',
       seats,
     };

@@ -9,12 +9,13 @@ import {
   type ServerMessage,
   type StartInfo,
 } from './protocol';
-import type { Command, Faction } from '../sim/types';
+import type { Command, Faction, MapKind } from '../sim/types';
 
 export interface Lobby {
   code: string;
   you: number;
   mode: Mode;
+  map: MapKind;
   players: LobbyPlayer[];
 }
 
@@ -83,6 +84,10 @@ export class RoomClient {
 
   chooseMode(mode: Mode): void {
     this.send({ t: 'mode', mode });
+  }
+
+  chooseMap(map: MapKind): void {
+    this.send({ t: 'map', map });
   }
 
   start(): void {

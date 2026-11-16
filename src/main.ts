@@ -57,6 +57,7 @@ window.addEventListener('keydown', (e) => {
 const sim = new Sim(options.seed, {
   seats,
   terrain: true,
+  map: options.map,
   // Against other people, everyone starts alike, with just a Pioneer.
   pioneers: online !== undefined,
   difficulty: options.difficulty,

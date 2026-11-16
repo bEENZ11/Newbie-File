@@ -204,7 +204,7 @@ Everything below is built and playable. A game is now a skirmish against the com
 
 ### Fog of war and the radar
 
-- **Shroud.** Ground nobody has seen is black. Ground seen earlier but not in view now is dimmed.
+- **Shroud.** Ground nobody has seen is black. Once ground has been seen it stays clear for the rest of the game, as in the classics, and anything that moves there afterwards can be seen.
 - **Sight.** Every unit and building sees a few cells around itself. Enemy units only appear while something of yours can see them, and enemy buildings stay marked once discovered.
 - **Radar.** A map of the whole battlefield sits at the top of the sidebar. Clicking or dragging on it moves the camera.
 
@@ -223,7 +223,7 @@ The enemy starts with a Construction Yard in the south-east and plays by the sam
 
 ### Sound
 
-Shots, cannon fire, explosions, collapsing buildings, order confirmations and build notifications are all synthesised in the browser, so there are no audio files to load or license. Sounds from the fog are silent, and those off-screen are quieter. M mutes.
+Explosions, collapsing buildings, flame, order confirmations and build notifications are recordings from Kenney's CC0 sound packs (Sci-Fi Sounds, Impact Sounds and Interface Sounds), kept in `public/sounds` with a credits file. Those packs have no convincing gunfire, so rifle shots and the thump of a tank gun are still synthesised in the browser, and every recording has a synthesised stand-in if it fails to load. Sounds from the fog are silent, and those off-screen are quieter. M mutes.
 
 ### The big map, gems and four players
 
@@ -334,6 +334,18 @@ Rules worth knowing:
 - A captured building works for its new owner straight away, and taking an enemy's last building wins the game.
 - The sidebar has a tab each for structures, infantry and vehicles. A dot on a tab shows that something behind it is building or ready.
 - The computer builds a Radar Station after its first attack and a Tech Centre after its second, and mixes rocket soldiers, grenadiers, scout cars, artillery and heavy tanks into its army. It does not yet use engineers, walls or depots.
+
+### Three maps, expanding, and telling buildings apart
+
+- **Maps.** The menu and the online lobby (host only) offer three, all for up to four players and all generated from the map number:
+  - **Lakeland**, the original: green country with big lakes, woods and ore everywhere.
+  - **Five Islands**: mostly sea. Each corner has its own island, joined to its neighbours and to a fifth island in the middle by causeways three cells wide. All the gems are on the middle island.
+  - **Dry Reach**: open sand with many small outcrops of rock, patches of scrub and a few small pools.
+- **Ore runs out.** A cell now holds a little less than one harvester load (460 for ore, 760 for gems), and the nuggets drawn on it thin out in six steps as it empties, so a worked field visibly shrinks.
+- **More Pioneers.** Once a Service Depot is up, the War Factory can build Pioneers (2,500 credits), which deploy into further Construction Yards anywhere.
+- **More buildings, faster work.** Each extra Construction Yard speeds up construction by half the basic rate, up to four yards (double and a half). Barracks do the same for infantry, and War Factories for vehicles.
+- **Telling buildings apart.** Every kind of building has its own colour, worn as a bright band round its pad, and a name tag floating over it in the same colour. L hides and shows the tags.
+- **Menu.** The title is no longer cut off when the window is shorter than the menu; the menu scrolls instead.
 
 ### Known problem: the computer cannot finish a game on the big map
 

@@ -313,6 +313,8 @@ export class Input {
       this.ui.placing = null;
       this.ui.sellMode = false;
       this.ui.repairMode = false;
+    } else if (e.key === 'l' || e.key === 'L') {
+      this.ui.labels = !this.ui.labels;
     } else if (e.key === 'd' || e.key === 'D') {
       for (const u of this.sim.world.units) {
         if (u.type === 'pioneer' && this.ui.selectedUnits.has(u.id)) {

@@ -43,8 +43,6 @@
         inset: 0;
         z-index: 10;
         display: flex;
-        align-items: center;
-        justify-content: center;
         overflow-y: auto;
         background:
           radial-gradient(ellipse at 20% 0%, rgba(63, 134, 224, 0.16), transparent 55%),
@@ -53,6 +51,8 @@
       #menu-box {
         width: min(760px, calc(100vw - 32px));
         padding: 24px 0;
+        /* Centred when there is room. When there is not, it starts at the top and scrolls, so nothing is cut off. */
+        margin: auto;
       }
       #menu h1 {
         margin: 0;
@@ -682,6 +682,11 @@
             <div id="mode" class="choice"></div>
             <div id="mode-note" class="hintline"></div>
           </div>
+          <div class="wide">
+            <div class="label">Map</div>
+            <div id="map" class="choice"></div>
+            <div id="map-note" class="hintline"></div>
+          </div>
           <div>
             <div class="label">Opponents</div>
             <div id="enemy" class="choice"></div>
@@ -719,11 +724,14 @@
           <div id="lobby-players"></div>
           <div class="label">Game</div>
           <div id="lobby-mode" class="choice"></div>
+          <div class="label">Map</div>
+          <div id="lobby-map" class="choice"></div>
+          <div id="lobby-map-note" class="hintline"></div>
           <button id="lobby-start">Start the game</button>
         </div>
         <p class="keys">
           Left-click selects. Right-click moves or attacks. Arrow keys or the screen edge scroll, and the mouse wheel
-          zooms. V turns the view, and M mutes the sound.
+          zooms. V turns the view, L shows or hides building names, and M mutes the sound.
         </p>
       </div>
     </div>

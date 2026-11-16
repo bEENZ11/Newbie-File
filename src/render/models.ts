@@ -16,6 +16,38 @@ const RUBBER = 0x1c1f23;
 const HAZARD = 0xe8b730;
 const GLASS = 0xbfe3ff;
 
+/**
+ * A colour of its own for each kind of building, worn as a bright band round
+ * the edge of its pad and on its name tag, so they can be told apart at a glance.
+ */
+export const SIGNATURE: Record<BuildingType, number> = {
+  conyard: 0xe8e8e8,
+  power: 0xffd23a,
+  refinery: 0xff8a2a,
+  barracks: 0x66c94f,
+  factory: 0xa57bf0,
+  radar: 0x35d0ea,
+  tech: 0xf062b4,
+  depot: 0xb08a5a,
+  turret: 0x8a939c,
+  wall: 0x8a939c,
+};
+
+const SIGNATURE_SET = new Set(Object.values(SIGNATURE));
+
+/** A raised band round the edge of a building's pad. */
+function trim(size: number, colour: number): THREE.Object3D[] {
+  const t = 0.09;
+  const y = 0.1;
+  const e = size / 2 - t / 2;
+  return [
+    box(size, 0.06, t, colour, 0, y, -e),
+    box(size, 0.06, t, colour, 0, y, e),
+    box(t, 0.06, size, colour, -e, y, 0),
+    box(t, 0.06, size, colour, e, y, 0),
+  ];
+}
+
 /** The palette the model currently being built should use. */
 let team = palettes[0];
 
@@ -29,7 +61,7 @@ function mat(colour: number): THREE.MeshStandardMaterial {
       color: colour,
       roughness: glass ? 0.15 : colour === RUBBER ? 0.95 : 0.72,
       metalness: glass ? 0.7 : colour === STEEL || colour === STEEL_DARK || colour === STEEL_LIGHT ? 0.35 : 0.08,
-      emissive: glass ? 0x24465c : 0x000000,
+      emissive: glass ? 0x24465c : SIGNATURE_SET.has(colour) ? new THREE.Color(colour).multiplyScalar(0.35).getHex() : 0x000000,
       flatShading: true,
     });
     materials.set(colour, m);
@@ -638,7 +670,17 @@ export function makeUnit(type: UnitType, owner: number): THREE.Group {
 }
 
 export function makeBuilding(type: BuildingType, owner: number): THREE.Group {
-  return fromTemplate(type, owner, BUILDERS[type]);
+  return fromTemplate(type, owner, () => {
+    const model = BUILDERS[type]();
+    if (type !== 'turret' && type !== 'wall') {
+      // The band belongs to the pad, so it rises with the first stage of the build.
+      const pad = model.children.find((c) => c.userData.stage === 0) ?? model;
+      const size = type === 'conyard' || type === 'refinery' || type === 'factory' ? 2.84 : 1.86;
+      for (const part of trim(size, SIGNATURE[type])) pad.add(part);
+      finish(pad);
+    }
+    return model;
+  });
 }
 
 const ghostMaterial = new THREE.MeshBasicMaterial({
@@ -696,4 +738,35 @@ export function makeRallyFlag(): THREE.Group {
   base.position.y = 0.03;
   g.add(pole, flag, base);
   return g;
+}
+
+/** A name tag that floats over a building and always faces the camera. */
+export function makeLabel(text: string, colour: number): THREE.Sprite {
+  const canvas = document.createElement('canvas');
+  const g = canvas.getContext('2d')!;
+  const font = '700 44px system-ui, sans-serif';
+  g.font = font;
+  const chip = 26;
+  const pad = 18;
+  canvas.width = Math.ceil(g.measureText(text).width) + chip + pad * 3;
+  canvas.height = 72;
+  g.font = font;
+  g.fillStyle = 'rgba(12, 15, 19, 0.78)';
+  g.beginPath();
+  g.roundRect(0, 0, canvas.width, canvas.height, 16);
+  g.fill();
+  g.fillStyle = `#${colour.toString(16).padStart(6, '0')}`;
+  g.beginPath();
+  g.roundRect(pad, (canvas.height - chip) / 2, chip, chip, 6);
+  g.fill();
+  g.fillStyle = '#f1f4f7';
+  g.textBaseline = 'middle';
+  g.fillText(text, pad * 2 + chip, canvas.height / 2 + 2);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, depthWrite: false, transparent: true }));
+  const height = 0.34;
+  sprite.scale.set((height * canvas.width) / canvas.height, height, 1);
+  sprite.renderOrder = 6;
+  return sprite;
 }

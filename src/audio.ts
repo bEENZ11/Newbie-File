@@ -1,5 +1,7 @@
-// Sound effects, synthesised in the browser so there are no audio files to
-// load or license. Everything here is cosmetic and never touches the game.
+// Sound effects. Explosions, impacts and the interface use recordings from
+// Kenney's CC0 sound packs (see public/sounds/CREDITS.md). Gunfire is
+// synthesised in the browser, and so is everything else if a recording fails
+// to load. Everything here is cosmetic and never touches the game.
 
 export type SoundName =
   | 'rifle'
@@ -18,7 +20,21 @@ export type SoundName =
 /** The shortest gap between two plays of the same sound, in milliseconds. */
 const MIN_GAP: Partial<Record<SoundName, number>> = { rifle: 45, cannon: 70, blast: 80, order: 60, flame: 120 };
 
+/** The recordings for each sound. One is picked at random each time, so repeats do not grate. */
+const SAMPLES: Partial<Record<SoundName, { files: string[]; gain: number }>> = {
+  blast: { files: ['explosionCrunch_000', 'explosionCrunch_001', 'explosionCrunch_002', 'explosionCrunch_003'], gain: 0.9 },
+  collapse: { files: ['lowFrequency_explosion_000', 'lowFrequency_explosion_001'], gain: 1.6 },
+  cannon: { files: ['impactMetal_heavy_000', 'impactMetal_heavy_001', 'impactMetal_heavy_002'], gain: 0.7 },
+  flame: { files: ['flame'], gain: 0.5 },
+  order: { files: ['select_001', 'select_002'], gain: 0.5 },
+  click: { files: ['click_001', 'click_002'], gain: 0.6 },
+  placed: { files: ['impactPlate_heavy_000', 'impactPlate_heavy_002'], gain: 1.0 },
+  ready: { files: ['confirmation_001', 'confirmation_002'], gain: 0.7 },
+  refused: { files: ['error_002'], gain: 0.7 },
+};
+
 export class Sounds {
+  private samples = new Map<string, AudioBuffer>();
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private noise: AudioBuffer | null = null;
@@ -44,8 +60,41 @@ export class Sounds {
       this.noise = this.ctx.createBuffer(1, this.ctx.sampleRate, this.ctx.sampleRate);
       const data = this.noise.getChannelData(0);
       for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+      this.load();
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
+  }
+
+  /** Fetches the recordings in the background. Until one arrives, its synthesised stand-in plays. */
+  private load(): void {
+    const ctx = this.ctx!;
+    const names = new Set(Object.values(SAMPLES).flatMap((s) => s.files));
+    for (const name of names) {
+      fetch(`sounds/${name}.mp3`)
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
+        .then((bytes) => ctx.decodeAudioData(bytes))
+        .then((buffer) => this.samples.set(name, buffer))
+        .catch(() => {
+          // No recording: the synthesised sound is used instead.
+        });
+    }
+  }
+
+  /** Plays a recording, at a slightly varied pitch. Returns false if it has not loaded. */
+  private sample(name: SoundName, volume: number): boolean {
+    const entry = SAMPLES[name];
+    if (!entry) return false;
+    const buffer = this.samples.get(entry.files[Math.floor(Math.random() * entry.files.length)]);
+    if (!buffer) return false;
+    const ctx = this.ctx!;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.playbackRate.value = 0.94 + Math.random() * 0.12;
+    const gain = ctx.createGain();
+    gain.gain.value = entry.gain * volume;
+    src.connect(gain).connect(this.master!);
+    src.start();
+    return true;
   }
 
   toggleMute(): boolean {
@@ -94,6 +143,9 @@ export class Sounds {
     if (now - (this.last.get(name) ?? -1e9) < (MIN_GAP[name] ?? 0)) return;
     this.last.set(name, now);
     const v = volume;
+    // A tank gun is a recorded clang on top of the synthesised thump. Everything
+    // else with a recording plays just that.
+    if (this.sample(name, v) && name !== 'cannon') return;
     switch (name) {
       case 'rifle':
         this.burst('highpass', 1800, 900, 0.07, 0.5 * v);

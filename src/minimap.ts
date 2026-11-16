@@ -9,6 +9,7 @@ import { LOCAL_PLAYER, type UiState } from './ui';
 
 type RGB = [number, number, number];
 const GROUND: RGB = [58, 84, 44];
+const SAND: RGB = [176, 150, 98];
 const ORE: RGB = [214, 160, 40];
 const GEMS: RGB = [70, 220, 205];
 const GROUND_BY_TYPE: Record<number, RGB> = {
@@ -97,7 +98,10 @@ export class Minimap {
     for (let i = 0; i < MAP_W * MAP_H; i++) {
       if (!explored[i]) put(i, [0, 0, 0], 1);
       else {
-        const ground = world.ore[i] > 0 ? (world.rich[i] ? GEMS : ORE) : (GROUND_BY_TYPE[world.terrain[i]] ?? GROUND);
+        const ground =
+          world.ore[i] > 0
+            ? world.rich[i] ? GEMS : ORE
+            : (GROUND_BY_TYPE[world.terrain[i]] ?? (world.map === 'desert' ? SAND : GROUND));
         put(i, ground, visible[i] ? 1 : 0.55);
       }
     }

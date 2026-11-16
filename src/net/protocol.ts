@@ -5,7 +5,7 @@
 // hand them back in the same order to everybody, a turn at a time. Because the
 // simulation is deterministic, the games stay identical.
 
-import type { Command, Difficulty, Faction } from '../sim/types';
+import type { Command, Difficulty, Faction, MapKind } from '../sim/types';
 
 /** Simulation ticks in one network turn. Orders take effect at the start of a turn. */
 export const TURN_TICKS = 2;
@@ -26,6 +26,7 @@ export interface LobbyPlayer {
 export interface StartInfo {
   seed: number;
   mode: Mode;
+  map: MapKind;
   difficulty: Difficulty;
   /** One entry per seat. Seats nobody is sitting in are played by the computer. */
   seats: { faction: Faction; team: number; ai: boolean }[];
@@ -34,12 +35,13 @@ export interface StartInfo {
 export type ClientMessage =
   | { t: 'faction'; faction: Faction }
   | { t: 'mode'; mode: Mode }
+  | { t: 'map'; map: MapKind }
   | { t: 'start' }
   | { t: 'cmd'; cmd: Command }
   | { t: 'hash'; turn: number; hash: number };
 
 export type ServerMessage =
-  | { t: 'lobby'; code: string; you: number; mode: Mode; players: LobbyPlayer[] }
+  | { t: 'lobby'; code: string; you: number; mode: Mode; map: MapKind; players: LobbyPlayer[] }
   | { t: 'start'; you: number; info: StartInfo }
   | { t: 'turn'; n: number; cmds: Command[] }
   | { t: 'left'; seat: number }

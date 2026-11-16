@@ -36,6 +36,8 @@ export interface UiState {
   sellMode: boolean;
   /** True while the next click on a building starts or stops its repair. */
   repairMode: boolean;
+  /** Whether name tags float over the buildings. L switches them. */
+  labels: boolean;
   /** The ground point under the mouse, in cells. */
   hoverX: number;
   hoverZ: number;
@@ -65,6 +67,7 @@ export function createUi(): UiState {
     placing: null,
     sellMode: false,
     repairMode: false,
+    labels: true,
     hoverX: 0,
     hoverZ: 0,
     dragBox: null,
