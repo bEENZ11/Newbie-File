@@ -280,7 +280,7 @@ describe('the satellite uplink', () => {
     expect(sim.world.players[0].uplink).toBe(300);
   });
 
-  it('goes dark and starts again if the Tech Centre is lost', () => {
+  it('stops and starts again if the Tech Centre is lost, though what it showed stays on the map', () => {
     const sim = base();
     const centre = tech(sim);
     run(sim, UPLINK_TICKS + 10);
@@ -288,8 +288,7 @@ describe('the satellite uplink', () => {
     run(sim, 10);
     expect(uplinkOnline(sim.world, 0)).toBe(false);
     expect(sim.world.players[0].uplink).toBe(0);
-    expect(sim.world.vision[0].visible[far]).toBe(0);
-    // What was seen stays on the map, as remembered ground.
+    expect(sim.world.vision[0].visible[far]).toBe(1);
     expect(sim.world.vision[0].explored[far]).toBe(1);
   });
 });

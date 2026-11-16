@@ -167,6 +167,10 @@ export const FACTION_DEFS: Record<Faction, FactionDef> = {
   },
 };
 
+/** The kinds of battlefield a game can be played on. */
+export type MapKind = 'lakes' | 'islands' | 'desert';
+export const MAP_KINDS: readonly MapKind[] = ['lakes', 'islands', 'desert'];
+
 /** How hard the computer opponent pushes. */
 export type Difficulty = 'easy' | 'normal' | 'hard';
 export const DIFFICULTIES: readonly Difficulty[] = ['easy', 'normal', 'hard'];
@@ -231,6 +235,8 @@ export interface BuildingDef {
 }
 
 export const UNIT_DEFS: Record<UnitType, UnitDef> = {
+  // The first one is given at the start. More can be built once there is a Service Depot,
+  // and each extra Construction Yard they become speeds up building.
   pioneer: {
     name: 'Pioneer',
     sight: 5,
@@ -239,9 +245,9 @@ export const UNIT_DEFS: Record<UnitType, UnitDef> = {
     weapon: null,
     speed: 32,
     cost: 2500,
-    produceTicks: 0,
-    queue: null,
-    requires: [],
+    produceTicks: 600,
+    queue: 'vehicle',
+    requires: ['depot'],
   },
   harvester: {
     name: 'Harvester',
@@ -729,6 +735,8 @@ export interface World {
   tick: number;
   /** The last team standing once the game is decided, or -1. */
   winner: number;
+  /** Which kind of battlefield this is. It decides how the ground is drawn. */
+  map: MapKind;
   rng: number;
   nextId: number;
   players: Player[];
@@ -818,3 +826,10 @@ export const SABOTAGE_DAMAGE = 650;
 /** True if two players are on opposing teams. */
 export const hostile = (world: World, a: number, b: number): boolean =>
   world.players[a].team !== world.players[b].team;
+
+/**
+ * How much faster work goes with more than one building doing it, out of 256.
+ * A second Construction Yard, Barracks or War Factory adds half as much again,
+ * up to four of each.
+ */
+export const SPEED_BY_COUNT: readonly number[] = [256, 256, 384, 512, 640];

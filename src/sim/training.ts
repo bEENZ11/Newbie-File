@@ -114,7 +114,7 @@ export function tickTraining(world: World, events: SimEvent[]): void {
       if (!building) continue;
 
       const def = UNIT_DEFS[type];
-      advance(p, q, def.cost, def.produceTicks, productionRate(world, player));
+      advance(p, q, def.cost, def.produceTicks, productionRate(world, player, QUEUE_BUILDING[kind]));
       if (q.progress < def.produceTicks) continue;
 
       const exit = exitCell(building);

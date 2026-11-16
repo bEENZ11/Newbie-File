@@ -22,7 +22,8 @@ describe('vision', () => {
     sim.issue({ type: 'move', player: 0, unitIds: [1], cx: START_CX + 20, cy: START_CY });
     run(sim, 300);
     expect(v.visible[cellIndex(START_CX + 20, START_CY)]).toBe(1);
-    expect(v.visible[cellIndex(START_CX, START_CY)]).toBe(0);
+    // Ground stays revealed after the unit that saw it has moved on.
+    expect(v.visible[cellIndex(START_CX, START_CY)]).toBe(1);
     expect(v.explored[cellIndex(START_CX, START_CY)]).toBe(1);
     expect(v.explored[cellIndex(START_CX + 10, START_CY)]).toBe(1);
   });
@@ -36,7 +37,7 @@ describe('vision', () => {
     expect(sim.world.vision[1].visible[cellIndex(START_CX, START_CY)]).toBe(0);
   });
 
-  it('is lost when the unit providing it is destroyed', () => {
+  it('stays revealed even after the unit that saw it is destroyed', () => {
     const sim = new Sim(1);
     sim.world.ore.fill(0);
     const scout = spawnUnit(sim.world, 'rifleman', 0, 40, 40);
@@ -44,7 +45,9 @@ describe('vision', () => {
     expect(sim.world.vision[0].visible[cellIndex(42, 40)]).toBe(1);
     scout.hp = 0;
     run(sim, 5);
-    expect(sim.world.vision[0].visible[cellIndex(42, 40)]).toBe(0);
+    expect(sim.world.vision[0].visible[cellIndex(42, 40)]).toBe(1);
     expect(sim.world.vision[0].explored[cellIndex(42, 40)]).toBe(1);
+    // But ground nobody has been near is still hidden.
+    expect(sim.world.vision[0].visible[cellIndex(70, 70)]).toBe(0);
   });
 });

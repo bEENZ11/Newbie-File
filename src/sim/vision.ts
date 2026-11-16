@@ -21,7 +21,7 @@ function reveal(visible: Uint8Array, cx: number, cy: number, radius: number): vo
 
 export function updateVision(world: World): void {
   world.vision.forEach((v, player) => {
-    v.visible.fill(0);
+    // Ground is never hidden again once it has been seen, so nothing is cleared here.
     // Allies share what they see, so a team fights as one.
     const team = world.players[player].team;
     // A satellite overhead shows the whole map to its owner and their allies.

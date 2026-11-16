@@ -10,6 +10,7 @@ import {
   REPAIR_HP,
   REPAIR_INTERVAL,
   SELL_REFUND_PERCENT,
+  SPEED_BY_COUNT,
   UPLINK_TICKS,
   cellIndex,
   dockCell,
@@ -92,12 +93,16 @@ export function cancelProduction(world: World, player: number): void {
   p.production = null;
 }
 
-/** Production speed out of 256. Low power slows it in proportion to the shortfall. */
-export function productionRate(world: World, player: number): number {
+/**
+ * Production speed out of 256. Low power slows it in proportion to the
+ * shortfall, and owning more than one of the building that does the work
+ * speeds it up.
+ */
+export function productionRate(world: World, player: number, doneBy: BuildingType): number {
   const power = powerOf(world, player);
-  return power.low
-    ? Math.max(MIN_POWER_RATE, Math.floor((power.supply * 256) / power.demand))
-    : 256;
+  const base = power.low ? Math.max(MIN_POWER_RATE, Math.floor((power.supply * 256) / power.demand)) : 256;
+  const count = world.buildings.filter((b) => b.owner === player && b.type === doneBy && isActive(b)).length;
+  return Math.floor((base * SPEED_BY_COUNT[Math.min(count, SPEED_BY_COUNT.length - 1)]) / 256);
 }
 
 /**
@@ -133,7 +138,7 @@ export function tickProduction(world: World, events: SimEvent[]): void {
     const prod = p.production;
     if (!prod || prod.state !== 'active') return;
 
-    advance(p, prod, BUILDING_DEFS[prod.type].cost, prod.total, productionRate(world, player));
+    advance(p, prod, BUILDING_DEFS[prod.type].cost, prod.total, productionRate(world, player, 'conyard'));
 
     if (prod.progress >= prod.total) {
       prod.state = 'ready';

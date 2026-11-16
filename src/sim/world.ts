@@ -6,6 +6,7 @@ import {
   BUILDING_TYPES,
   DIFFICULTIES,
   FACTIONS,
+  MAP_KINDS,
   HARVEST_JOBS,
   UNIT_TYPES,
   MAP_H,
@@ -24,6 +25,7 @@ import {
   type BuildingType,
   type Difficulty,
   type Faction,
+  type MapKind,
   type Player,
   type Unit,
   type UnitQueue,
@@ -48,6 +50,8 @@ export interface Scenario {
   outpost?: boolean;
   /** Scatters rocks, lakes and woods across the map. Without it the map is open grass. */
   terrain?: boolean;
+  /** Which map to generate, when terrain is on. Lakes if not given. */
+  map?: MapKind;
   /**
    * Up to four players. Seat 0 starts with a Pioneer in the north-west and
    * every other seat with a Construction Yard in its own corner. If this is
@@ -85,6 +89,9 @@ export const BASES: readonly { x: number; y: number }[] = [
 
 const OUTPOST_X = BASES[1].x - 3;
 const OUTPOST_Y = BASES[1].y - 3;
+/** The most ore, and the most gems, one cell can hold, in the credits it is worth. */
+export const ORE_CELL = 460;
+export const GEM_CELL = 760;
 /** No rocks, water, trees or stray ore are generated this close to a starting position. */
 const BASE_CLEARANCE = 11;
 
@@ -107,6 +114,7 @@ export function createWorld(seed: number, scenario: Scenario = {}): World {
   const world: World = {
     tick: 0,
     winner: -1,
+    map: scenario.terrain ? (scenario.map ?? 'lakes') : 'lakes',
     rng: seed | 0,
     nextId: 1,
     players: seats.map((s, i) => newPlayer(present(i), s.faction, s.team, credits)),
@@ -160,7 +168,7 @@ function orePatch(world: World, px: number, py: number, radius: number, gems = f
       if (!inBounds(x, y) || (x - px) * (x - px) + (y - py) * (y - py) > radius * radius) continue;
       const i = cellIndex(x, y);
       if (world.terrain[i] !== GRASS || world.blocked[i]) continue;
-      world.ore[i] = gems ? 1400 : 900;
+      world.ore[i] = gems ? GEM_CELL : ORE_CELL;
       world.rich[i] = gems ? 1 : 0;
     }
   }
@@ -221,7 +229,7 @@ function addOutpost(world: World): void {
 const emptyQueue = (): UnitQueue => ({ items: [], progress: 0, paid: 0, held: false, speedAcc: 0 });
 
 /** Fills a rough blob of cells with a ground type, leaving every starting position clear. */
-function blob(world: World, type: number, px: number, py: number, rx: number, ry: number): void {
+function blob(world: World, type: number, px: number, py: number, rx: number, ry: number, only = -1): void {
   for (let y = py - ry; y <= py + ry; y++) {
     for (let x = px - rx; x <= px + rx; x++) {
       if (!inBounds(x, y) || nearBase(x, y, BASE_CLEARANCE)) continue;
@@ -230,28 +238,94 @@ function blob(world: World, type: number, px: number, py: number, rx: number, ry
       if (d > 100) continue;
       // A ragged edge, so shores and treelines are not perfect ovals.
       if (d > 70 && randInt(world, 2) === 0) continue;
-      world.terrain[cellIndex(x, y)] = type;
+      const i = cellIndex(x, y);
+      // When asked, only replace one kind of ground, such as dry land but not water.
+      if (only !== -1 && world.terrain[i] !== only) continue;
+      world.terrain[i] = type;
     }
   }
 }
 
+const at = (world: World): [number, number] => [6 + randInt(world, MAP_W - 12), 6 + randInt(world, MAP_H - 12)];
+
+/** Big lakes, rocky outcrops and woods. Each lake is several overlapping ovals, which gives it bays and headlands. */
+function lakeland(world: World): void {
+  for (let lake = 0; lake < 6; lake++) {
+    const [lx, ly] = at(world);
+    for (let part = 0; part < 3; part++) {
+      blob(world, WATER, lx + randInt(world, 15) - 7, ly + randInt(world, 15) - 7, 6 + randInt(world, 7), 5 + randInt(world, 6));
+    }
+  }
+  for (let i = 0; i < 18; i++) blob(world, ROCK, ...at(world), 1 + randInt(world, 3), 1 + randInt(world, 3));
+  for (let i = 0; i < 46; i++) blob(world, TREES, ...at(world), 1 + randInt(world, 3), 1 + randInt(world, 3));
+}
+
+/** Open sand broken up by a great many rocks and patches of scrub, with a few small pools. */
+function desert(world: World): void {
+  for (let i = 0; i < 12; i++) blob(world, WATER, ...at(world), 2 + randInt(world, 2), 2 + randInt(world, 2));
+  for (let i = 0; i < 46; i++) blob(world, ROCK, ...at(world), 1 + randInt(world, 3), 1 + randInt(world, 3));
+  for (let i = 0; i < 70; i++) blob(world, TREES, ...at(world), 1 + randInt(world, 2), 1 + randInt(world, 2));
+}
+
 /**
- * Big lakes, rocky outcrops and woods. Each lake is several overlapping ovals,
- * which gives it bays and headlands. Retries until every starting position
- * can be reached from the first.
+ * Sea, with an island in each corner for a base and a fifth in the middle.
+ * Narrow causeways join each corner island to its two neighbours and to the
+ * centre, so every route off an island is a chokepoint.
  */
+function islands(world: World): void {
+  world.terrain.fill(WATER);
+  const cx = MAP_W >> 1;
+  const cy = MAP_H >> 1;
+  const land = (px: number, py: number, radius: number): void => {
+    for (let y = py - radius; y <= py + radius; y++) {
+      for (let x = px - radius; x <= px + radius; x++) {
+        if (!inBounds(x, y)) continue;
+        const d2 = (x - px) * (x - px) + (y - py) * (y - py);
+        if (d2 > radius * radius) continue;
+        // A ragged shoreline.
+        if (d2 > (radius - 2) * (radius - 2) && randInt(world, 3) === 0) continue;
+        world.terrain[cellIndex(x, y)] = GRASS;
+      }
+    }
+  };
+  /** A straight strip of land between two points, a few cells wide. */
+  const causeway = (ax: number, ay: number, bx: number, by: number): void => {
+    const steps = Math.max(Math.abs(bx - ax), Math.abs(by - ay));
+    for (let s = 0; s <= steps; s++) {
+      const x = ax + Math.round(((bx - ax) * s) / steps);
+      const y = ay + Math.round(((by - ay) * s) / steps);
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) if (inBounds(x + dx, y + dy)) world.terrain[cellIndex(x + dx, y + dy)] = GRASS;
+      }
+    }
+  };
+  for (const b of BASES) land(b.x, b.y, 21);
+  land(cx, cy, 14);
+  for (const b of BASES) causeway(b.x, b.y, cx, cy);
+  // Round the outside: north-west to north-east to south-east to south-west and back.
+  const ring = [BASES[0], BASES[2], BASES[1], BASES[3]];
+  ring.forEach((b, i) => causeway(b.x, b.y, ring[(i + 1) % 4].x, ring[(i + 1) % 4].y));
+
+  // A little cover on the islands themselves. The causeways are too narrow to hold any,
+  // so nothing placed here can cut one.
+  const onIsland = (): [number, number] => {
+    const home = randInt(world, 5);
+    const centre = home === 4 ? { x: cx, y: cy } : BASES[home];
+    return [centre.x + randInt(world, 31) - 15, centre.y + randInt(world, 31) - 15];
+  };
+  for (let i = 0; i < 26; i++) blob(world, TREES, ...onIsland(), 1 + randInt(world, 2), 1 + randInt(world, 2), GRASS);
+  for (let i = 0; i < 10; i++) blob(world, ROCK, ...onIsland(), 1, 1, GRASS);
+  for (const b of BASES) causeway(b.x, b.y, cx, cy);
+  ring.forEach((b, i) => causeway(b.x, b.y, ring[(i + 1) % 4].x, ring[(i + 1) % 4].y));
+}
+
+/** Builds the ground for the chosen map. Retries until every starting position in use can be reached. */
 function generateTerrain(world: World, seats: number): void {
   for (let attempt = 0; attempt < 30; attempt++) {
     world.terrain.fill(GRASS);
-    const at = (): [number, number] => [6 + randInt(world, MAP_W - 12), 6 + randInt(world, MAP_H - 12)];
-    for (let lake = 0; lake < 6; lake++) {
-      const [lx, ly] = at();
-      for (let part = 0; part < 3; part++) {
-        blob(world, WATER, lx + randInt(world, 15) - 7, ly + randInt(world, 15) - 7, 6 + randInt(world, 7), 5 + randInt(world, 6));
-      }
-    }
-    for (let i = 0; i < 18; i++) blob(world, ROCK, ...at(), 1 + randInt(world, 3), 1 + randInt(world, 3));
-    for (let i = 0; i < 46; i++) blob(world, TREES, ...at(), 1 + randInt(world, 3), 1 + randInt(world, 3));
+    if (world.map === 'islands') islands(world);
+    else if (world.map === 'desert') desert(world);
+    else lakeland(world);
     for (let i = 0; i < world.terrain.length; i++) world.blocked[i] = world.terrain[i] !== GRASS ? 1 : 0;
 
     const home = cellIndex(BASES[0].x, BASES[0].y);
@@ -267,10 +341,23 @@ function generateTerrain(world: World, seats: number): void {
 }
 
 /**
- * Plenty of ordinary ore across the map, and a few fields of gems around the
- * middle, where every side has to come out and compete for them.
+ * Ore across the map, and gems around the middle, where every side has to
+ * come out and compete for them. A cell holds less than a harvester's load,
+ * so a field visibly shrinks as it is worked.
  */
 function scatterOre(world: World): void {
+  if (world.map === 'islands') {
+    // Each island has its own ore, close in and further out, and the prize is on the fifth.
+    for (const b of BASES) {
+      const sx = b.x < MAP_W / 2 ? 1 : -1;
+      const sy = b.y < MAP_H / 2 ? 1 : -1;
+      homeOre(world, b);
+      orePatch(world, b.x + sx * 15, b.y + sy * 2, 3);
+      orePatch(world, b.x + sx * 2, b.y + sy * 15, 3);
+    }
+    orePatch(world, MAP_W >> 1, MAP_H >> 1, 7, true);
+    return;
+  }
   const field = (gems: boolean, low: number, span: number, radiusBase: number, radiusSpan: number): void => {
     const px = low + randInt(world, span);
     const py = low + randInt(world, span);
@@ -285,12 +372,12 @@ function scatterOre(world: World): void {
         if (d2 > (radius - 1) * (radius - 1) && randInt(world, 3) === 0) continue;
         const i = cellIndex(x, y);
         if (world.terrain[i] !== GRASS) continue;
-        world.ore[i] = gems ? 1200 + randInt(world, 5) * 100 : 600 + randInt(world, 5) * 100;
+        world.ore[i] = (gems ? GEM_CELL : ORE_CELL) - randInt(world, 5) * 40;
         world.rich[i] = gems ? 1 : 0;
       }
     }
   };
-  for (let i = 0; i < 22; i++) field(false, 5, MAP_W - 10, 3, 4);
+  for (let i = 0; i < 26; i++) field(false, 5, MAP_W - 10, 3, 4);
   // Gems only turn up in the middle half of the map.
   for (let i = 0; i < 7; i++) field(true, MAP_W >> 2, MAP_W >> 1, 2, 2);
 }
@@ -424,6 +511,7 @@ export function hashWorld(world: World): number {
   };
   mix(world.tick);
   mix(world.winner);
+  mix(MAP_KINDS.indexOf(world.map));
   for (const ai of world.ai) {
     mix(ai ? ai.wave + 1 : 0);
     mix(ai ? ai.lastWave : 0);
